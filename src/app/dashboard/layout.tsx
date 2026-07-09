@@ -4,11 +4,10 @@
 import { useAuth, type UserRole } from "@/lib/auth-context";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { DashboardSidebar } from "@/components/layout/dashboard-sidebar";
-import { LanguageSwitcher } from "@/components/layout/language-switcher";
-import { 
-  Menu, 
-  Building2, 
+import { MobileTopBar } from "@/components/mobile/mobile-top-bar";
+import { MobileBottomNav } from "@/components/mobile/mobile-bottom-nav";
+import {
+  Building2,
   Heart, 
   Youtube, 
   MessageSquare, 
@@ -27,8 +26,7 @@ import {
   X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
-import { 
+import {
   Dialog, 
   DialogContent, 
   DialogHeader, 
@@ -61,7 +59,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const { toast } = useToast();
   
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isTestimonyModalOpen, setIsTestimonyModalOpen] = useState(false);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
   
@@ -166,10 +163,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (licenseState.restrictionApplies && !isPlatformExecutive && !isSubscriptionPage) {
     return (
-      <div className="flex min-h-dvh flex-col md:flex-row bg-background">
-        <aside className="hidden md:flex w-64 shrink-0 h-full">
-          <DashboardSidebar />
-        </aside>
+      <div className="flex min-h-dvh flex-col bg-background">
         <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 md:p-8 bg-accent/10">
           <Card className="max-w-md w-full border-none shadow-2xl rounded-[2rem] overflow-hidden">
             <CardHeader className="bg-primary p-6 sm:p-8 text-white text-center">
@@ -212,61 +206,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     : user?.school?.shortName || user?.school?.name || "Institution";
 
   return (
-    <div className="flex min-h-dvh flex-col md:flex-row bg-background">
-      <aside className="hidden md:flex w-64 shrink-0 h-full">
-        <DashboardSidebar />
-      </aside>
+    <div className="flex min-h-dvh flex-col bg-background">
+      <MobileTopBar />
 
-      <div className="flex-1 flex min-h-dvh flex-col overflow-hidden">
-        <header className="md:hidden sticky top-0 z-20 flex items-center justify-between gap-3 px-3 py-3 bg-primary/95 backdrop-blur text-white shrink-0">
-          <div className="flex items-center gap-2 overflow-hidden">
-            {!isPlatformExecutive && schoolLogo ? (
-              <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center shrink-0 overflow-hidden">
-                <img src={schoolLogo} alt="Logo" className="w-full h-full object-contain" />
-              </div>
-            ) : isPlatformExecutive ? (
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-white p-1">
-                <img
-                  src={platformLogo}
-                  alt={`${platformSettings.name} logo`}
-                  className="max-h-full max-w-full object-contain"
-                />
-              </div>
-            ) : null}
-            <span className="font-bold tracking-tight text-white truncate uppercase">
-              {dashboardTitle}
-            </span>
-          </div>
-          <div className="flex items-center gap-1">
-            <LanguageSwitcher tone="dark" />
-            <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-white">
-                  <Menu className="w-6 h-6" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="p-0 border-none w-[88vw] max-w-80">
-                <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
-                <DashboardSidebar onClose={() => setIsMobileMenuOpen(false)} />
-              </SheetContent>
-            </Sheet>
-          </div>
-        </header>
-
-        <header className="hidden md:flex sticky top-0 z-20 items-center justify-between gap-4 border-b border-border/60 bg-background/95 px-8 py-3 backdrop-blur shrink-0">
-          <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-muted-foreground">
-              {t("workspaceLanguage")}
-            </p>
-            <p className="truncate text-sm font-black text-primary uppercase tracking-tight">
-              {dashboardTitle}
-            </p>
-          </div>
-          <LanguageSwitcher />
-        </header>
-
-        <main className="flex-1 overflow-y-auto">
-          <div className="px-3 py-4 sm:px-4 md:p-8 min-h-full flex flex-col">
+      <div className="flex-1 flex min-h-0 flex-col overflow-hidden">
+        <main className="flex-1 overflow-y-auto pb-24">
+          <div className="px-3 py-4 sm:px-4 min-h-full flex flex-col">
             <div className="max-w-7xl mx-auto space-y-6 md:space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500 w-full flex-1">
               <ErrorBoundary fallbackTitle="Something went wrong on our end.">
                 {children}
@@ -472,6 +417,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </main>
       </div>
+
+      <MobileBottomNav />
     </div>
   );
 }

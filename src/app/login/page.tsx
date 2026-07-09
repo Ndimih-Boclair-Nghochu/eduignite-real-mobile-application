@@ -4,14 +4,6 @@ import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { useFirebaseBootstrapStatus } from "@/firebase/client-provider";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardFooter,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -20,16 +12,15 @@ import {
   Loader2,
   Lock,
   Fingerprint,
-  ExternalLink,
   ShieldCheck,
   Mail,
   ArrowLeft,
   CheckCircle2,
   Wifi,
-  Sparkles,
   Eye,
   EyeOff,
   AlertTriangle,
+  ArrowRight,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -39,13 +30,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import Link from "next/link";
 import { authService } from "@/lib/api/services/auth.service";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import { resolvePlatformLogoUrl } from "@/lib/platform-brand";
 
 type AuthMode = "login" | "activate" | "forgot" | "otp" | "reset" | "success";
-
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -165,376 +154,365 @@ export default function LoginPage() {
     setAuthMode(newMode);
   };
 
+  const heading =
+    mode === "login"
+      ? language === "en" ? "Welcome back" : "Bon retour"
+      : mode === "activate"
+        ? t("activateAccountTitle")
+        : t("resetPassword");
+
+  const subheading =
+    mode === "login"
+      ? language === "en"
+        ? "Sign in to continue to your dashboard."
+        : "Connectez-vous pour accéder à votre tableau de bord."
+      : mode === "activate"
+        ? language === "en"
+          ? "Set a password to activate your account."
+          : "Définissez un mot de passe pour activer votre compte."
+        : language === "en"
+          ? "We'll email you a secure reset link."
+          : "Nous vous enverrons un lien de réinitialisation.";
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F0F2F5] p-4 sm:p-8 relative overflow-hidden">
-      <div className="pointer-events-none absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-[100px]" />
-      <div className="pointer-events-none absolute bottom-0 left-0 w-[500px] h-[500px] bg-secondary/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-[100px]" />
+    <div
+      className="relative flex min-h-dvh flex-col overflow-hidden bg-background"
+      style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
+    >
+      {/* Brand ambient background */}
+      <div className="pointer-events-none absolute -top-32 right-0 h-80 w-80 rounded-full bg-primary/[0.07] blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 -left-24 h-80 w-80 rounded-full bg-secondary/15 blur-3xl" />
 
       {isDev && (
-        <div className="absolute top-8 left-8 z-20">
-          <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-full shadow-sm">
-            <Wifi className="w-4 h-4 text-green-600 animate-pulse" />
-                <span className="text-xs font-bold text-green-700">{t("connectedToLiveBackend")}</span>
+        <div className="absolute left-4 top-4 z-20">
+          <div className="flex items-center gap-2 rounded-full border border-green-200 bg-green-50 px-3 py-1.5 shadow-sm">
+            <Wifi className="h-3.5 w-3.5 animate-pulse text-green-600" />
+            <span className="text-[10px] font-bold text-green-700">{t("connectedToLiveBackend")}</span>
           </div>
         </div>
       )}
 
-      <div className="absolute top-6 right-4 z-30 sm:top-8 sm:right-8">
+      {/* Language selector */}
+      <div className="absolute right-4 top-4 z-30" style={{ marginTop: "env(safe-area-inset-top, 0px)" }}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
-              variant="outline"
-              className="h-11 px-4 sm:px-5 gap-2 bg-white/80 backdrop-blur-xl border-primary/10 rounded-2xl shadow-sm hover:bg-white transition-all touch-manipulation"
+              variant="ghost"
+              className="h-10 gap-2 rounded-full border border-border/60 bg-white/80 px-4 shadow-sm backdrop-blur transition-all hover:bg-white"
             >
-              <Languages className="w-4 h-4 text-primary" />
-              <span className="font-bold text-xs uppercase tracking-widest">
-                {language === "en" ? "English" : "Français"}
+              <Languages className="h-4 w-4 text-primary" />
+              <span className="text-xs font-bold uppercase tracking-wider text-primary">
+                {language === "en" ? "EN" : "FR"}
               </span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="rounded-xl border-none shadow-2xl p-2">
-            <DropdownMenuItem
-              onClick={() => setLanguage("en")}
-              className="rounded-lg font-bold text-xs py-2.5"
-            >
+          <DropdownMenuContent align="end" className="rounded-2xl border-none p-2 shadow-2xl">
+            <DropdownMenuItem onClick={() => setLanguage("en")} className="rounded-xl py-2.5 text-xs font-bold">
               ENGLISH (UK)
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => setLanguage("fr")}
-              className="rounded-lg font-bold text-xs py-2.5"
-            >
+            <DropdownMenuItem onClick={() => setLanguage("fr")} className="rounded-xl py-2.5 text-xs font-bold">
               FRANÇAIS (FR)
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      <div className="w-full max-w-lg flex flex-col items-center gap-10 relative z-10">
-        <div className="flex flex-col items-center text-center space-y-4">
-          <div className="flex h-28 w-28 items-center justify-center rounded-[2rem] bg-white p-3 shadow-2xl ring-1 ring-primary/10 transition-all hover:scale-105 active:scale-95 sm:h-32 sm:w-32">
+      <div className="relative z-10 mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-6 py-14">
+        {/* Brand */}
+        <div className="mb-10 flex flex-col items-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-[1.6rem] bg-white p-3 shadow-xl ring-1 ring-primary/10">
             <img src={platformLogo} alt={`${platformSettings.name} logo`} className="h-full w-full object-contain" />
           </div>
-          <div className="space-y-1">
-            <h1 className="text-5xl md:text-6xl font-black text-primary font-headline tracking-tighter leading-none">
-              {platformSettings.name}
-            </h1>
-            <p className="text-xs text-muted-foreground font-black uppercase tracking-[0.4em] opacity-40">
-              {t("highFidelityAccessPortal")}
-            </p>
-          </div>
+          <h1 className="mt-4 text-2xl font-black tracking-tight text-primary">
+            {platformSettings.name}
+          </h1>
         </div>
 
-        <Card className="w-full border-none shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] overflow-hidden rounded-[3rem] bg-white/90 backdrop-blur-2xl border border-white/50 animate-in fade-in slide-in-from-bottom-4 duration-700">
-          {mode === "success" ? (
-            <div className="p-12 text-center space-y-8 animate-in zoom-in-95 duration-500">
-              <div className="w-24 h-24 bg-green-50 text-green-600 rounded-[2rem] flex items-center justify-center mx-auto shadow-inner border border-green-100">
-                <Mail className="w-12 h-12" />
-              </div>
-              <div className="space-y-2">
-                <CardTitle className="text-3xl font-black text-primary uppercase tracking-tighter">
-                  Check Your Email
-                </CardTitle>
-                <CardDescription className="text-sm font-medium px-4">
-                  A password reset link has been sent to your email address. Click the link in the email to set a new password. The link expires in 5 minutes.
-                </CardDescription>
-              </div>
-              <Button
-                onClick={() => switchMode("login")}
-                className="w-full h-16 rounded-[1.5rem] font-black uppercase tracking-widest text-sm bg-primary shadow-xl hover:bg-primary/90 transition-all active:scale-95"
-              >
-                {t("returnToSignIn")}
-              </Button>
+        {mode === "success" ? (
+          <div className="rounded-[2rem] bg-white p-8 text-center shadow-xl ring-1 ring-black/[0.04] animate-in zoom-in-95 duration-500">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-green-100 bg-green-50 text-green-600">
+              <Mail className="h-8 w-8" />
             </div>
-          ) : (
-            <>
-              <CardHeader className="pb-8 pt-10 text-center space-y-2 px-10">
-                <CardTitle className="text-4xl font-black text-primary uppercase tracking-tighter">
-                  {mode === "login"
-                    ? t("signIn")
-                    : mode === "activate"
-                      ? t("activateAccountTitle")
-                    : t("resetPassword")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-10">
-                {firebaseInitError && (
-                  <div className="mb-6 rounded-[1.5rem] border border-red-200 bg-red-50 px-5 py-4 text-left shadow-sm">
-                    <div className="flex items-start gap-3">
-                      <div className="mt-0.5 rounded-full bg-red-100 p-2 text-red-600">
-                        <AlertTriangle className="h-4 w-4" />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-700">
-                          Login setup problem
-                        </p>
-                        <p className="text-sm font-medium leading-relaxed text-red-900">
-                          {firebaseInitError}
-                        </p>
-                      </div>
+            <h2 className="mt-6 text-xl font-black tracking-tight text-foreground">Check your email</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              A password reset link has been sent to your email address. It expires in 5 minutes.
+            </p>
+            <Button
+              onClick={() => switchMode("login")}
+              className="mt-8 h-14 w-full rounded-2xl text-sm font-bold shadow-lg transition-all active:scale-[0.98]"
+            >
+              {t("returnToSignIn")}
+            </Button>
+          </div>
+        ) : (
+          <div className="rounded-[2rem] bg-white p-6 shadow-xl ring-1 ring-black/[0.04] animate-in fade-in slide-in-from-bottom-4 duration-500 sm:p-8">
+            <div className="mb-7">
+              <h2 className="text-[26px] font-black leading-tight tracking-tight text-foreground">
+                {heading}
+              </h2>
+              <p className="mt-1 text-sm font-medium text-muted-foreground">{subheading}</p>
+            </div>
+
+            {firebaseInitError && (
+              <div className="mb-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3.5">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-red-700">Login setup problem</p>
+                    <p className="mt-1 text-[13px] font-medium leading-relaxed text-red-900">{firebaseInitError}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleAuth} className="space-y-5">
+              {authError && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3.5">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-red-700">Login problem</p>
+                      <p className="mt-1 text-[13px] font-semibold leading-relaxed text-red-900">{authError}</p>
                     </div>
                   </div>
-                )}
-                <form onSubmit={handleAuth} className="space-y-6">
-                  {authError && (
-                    <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-left shadow-sm">
-                      <div className="flex items-start gap-3">
-                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-700">
-                            Login problem
-                          </p>
-                          <p className="mt-1 text-sm font-bold leading-relaxed text-red-900">
-                            {authError}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {mode === "forgot" && (
-                    <div className="space-y-6 animate-in slide-in-from-top-2">
-                      <p className="text-sm text-center text-muted-foreground">
-                        Enter your matricule and we'll send a password reset link to your registered email.
-                      </p>
-                      <div className="space-y-3">
-                        <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-[0.2em] ml-1 flex items-center gap-2">
-                          <Fingerprint className="w-3.5 h-3.5 text-primary/40" /> {t("matricule")}
-                        </Label>
-                        <Input
-                          required
-                          autoComplete="username"
-                          type="text"
-                          disabled={isProcessing}
-                          className="h-14 bg-accent/30 border-none rounded-2xl focus-visible:ring-primary font-bold normal-case text-center text-lg shadow-inner transition-all focus:bg-white px-6"
-                          style={{ textTransform: "none" }}
-                          placeholder="e.g. STU001"
-                          value={authData.matricule}
-                          onChange={(e) => { setAuthError(null); setAuthData({ ...authData, matricule: e.target.value }); }}
-                        />
-                      </div>
-                    </div>
-                  )}
+                </div>
+              )}
 
-                  {(mode === "login" || mode === "activate") && (
-                    <>
-                      <div className="space-y-3">
-                        <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-[0.2em] ml-1 flex items-center gap-2">
-                          <Fingerprint className="w-3.5 h-3.5 text-primary/40" /> {t("matricule")}
-                        </Label>
-                        <Input
-                          required
-                          autoComplete="off"
-                          disabled={isProcessing}
-                          className="h-14 bg-accent/30 border-none rounded-2xl focus-visible:ring-primary font-black normal-case text-center text-xl shadow-inner transition-all focus:bg-white"
-                          style={{ textTransform: "none" }}
-                          value={authData.matricule}
-                          onChange={(e) => {
-                            setAuthError(null);
-                            setAuthData({ ...authData, matricule: e.target.value });
-                          }}
-                        />
-                        <p className="px-1 text-center text-[10px] font-bold text-muted-foreground">
-                          Matricule is case-sensitive. Lowercase letters stay lowercase.
-                        </p>
-                      </div>
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between px-1">
-                          <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-[0.2em] flex items-center gap-2">
-                            <Lock className="w-3.5 h-3.5 text-primary/40" /> {t("password")}
-                          </Label>
-                          {mode === "login" && (
-                            <button
-                              type="button"
-                              disabled={isProcessing}
-                              className="text-[10px] font-black uppercase text-primary/40 hover:text-primary transition-colors tracking-widest disabled:opacity-50"
-                              onClick={() => switchMode("forgot")}
-                            >
-                              {t("forgotPassword")}
-                            </button>
-                          )}
-                        </div>
-                        <div className="relative">
-                          <Input
-                            required
-                            autoComplete={mode === "activate" ? "new-password" : "current-password"}
-                            type={showPassword ? "text" : "password"}
-                            disabled={isProcessing}
-                            className="h-14 bg-accent/30 border-none rounded-2xl focus-visible:ring-primary font-bold text-center text-lg shadow-inner transition-all focus:bg-white px-12"
-                            value={authData.password}
-                            onChange={(e) => { setAuthError(null); setAuthData({ ...authData, password: e.target.value }); }}
-                          />
-                          <button
-                            type="button"
-                            aria-label={showPassword ? "Hide password" : "Show password"}
-                            disabled={isProcessing}
-                            className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-primary/50 transition-colors hover:text-primary disabled:opacity-50"
-                            onClick={() => setShowPassword((current) => !current)}
-                          >
-                            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
+              {mode === "forgot" && (
+                <div className="space-y-2 animate-in slide-in-from-top-2">
+                  <Label className="text-xs font-bold text-foreground/80">{t("matricule")}</Label>
+                  <div className="relative">
+                    <Fingerprint className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+                    <Input
+                      required
+                      autoComplete="username"
+                      type="text"
+                      disabled={isProcessing}
+                      className="h-14 rounded-2xl border-border/60 bg-muted/40 pl-11 text-base font-semibold transition-all focus:bg-white focus-visible:ring-primary"
+                      style={{ textTransform: "none" }}
+                      placeholder="e.g. STU001"
+                      value={authData.matricule}
+                      onChange={(e) => { setAuthError(null); setAuthData({ ...authData, matricule: e.target.value }); }}
+                    />
+                  </div>
+                </div>
+              )}
 
-                  {mode === "activate" && (
-                    <div className="space-y-3 animate-in slide-in-from-top-2">
-                      <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-[0.2em] ml-1 flex items-center gap-2">
-                        <ShieldCheck className="w-3.5 h-3.5 text-primary/40" /> {t("confirmPasswordLabel")}
-                      </Label>
-                      <div className="relative">
-                        <Input
-                          required
-                          autoComplete="new-password"
-                          type={showConfirmPassword ? "text" : "password"}
-                          disabled={isProcessing}
-                          className="h-14 bg-accent/30 border-none rounded-2xl focus-visible:ring-primary font-bold text-center text-lg shadow-inner transition-all focus:bg-white px-12"
-                          value={authData.confirmPassword}
-                          onChange={(e) =>
-                            setAuthData({ ...authData, confirmPassword: e.target.value })
-                          }
-                        />
+              {(mode === "login" || mode === "activate") && (
+                <>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-foreground/80">{t("matricule")}</Label>
+                    <div className="relative">
+                      <Fingerprint className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+                      <Input
+                        required
+                        autoComplete="off"
+                        disabled={isProcessing}
+                        placeholder="STU001"
+                        className="h-14 rounded-2xl border-border/60 bg-muted/40 pl-11 text-base font-semibold transition-all focus:bg-white focus-visible:ring-primary"
+                        style={{ textTransform: "none" }}
+                        value={authData.matricule}
+                        onChange={(e) => {
+                          setAuthError(null);
+                          setAuthData({ ...authData, matricule: e.target.value });
+                        }}
+                      />
+                    </div>
+                    <p className="pl-1 text-[11px] font-medium text-muted-foreground/80">
+                      {language === "en"
+                        ? "Matricule is case-sensitive."
+                        : "Le matricule est sensible à la casse."}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-bold text-foreground/80">{t("password")}</Label>
+                      {mode === "login" && (
                         <button
                           type="button"
-                          aria-label={showConfirmPassword ? "Hide password confirmation" : "Show password confirmation"}
                           disabled={isProcessing}
-                          className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-primary/50 transition-colors hover:text-primary disabled:opacity-50"
-                          onClick={() => setShowConfirmPassword((current) => !current)}
+                          className="text-xs font-bold text-primary transition-colors hover:text-primary/80 disabled:opacity-50"
+                          onClick={() => switchMode("forgot")}
                         >
-                          {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          {t("forgotPassword")}
                         </button>
-                      </div>
+                      )}
                     </div>
-                  )}
-
-                  {mode === "otp" && (
-                    <div className="space-y-6 animate-in zoom-in-95">
-                      <div className="space-y-3">
-                        <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-[0.2em] text-center block">
-                          {t("sixDigitVerificationCode")}
-                        </Label>
-                        <Input
-                          required
-                          autoComplete="one-time-code"
-                          disabled={isProcessing}
-                          className="h-20 bg-accent/30 border-none rounded-[2rem] focus-visible:ring-primary font-black text-4xl text-center tracking-[0.5em] shadow-inner transition-all focus:bg-white"
-                          maxLength={6}
-                          value={authData.otp}
-                          onChange={(e) => setAuthData({ ...authData, otp: e.target.value })}
-                        />
-                      </div>
-                      <p className="text-[10px] text-center text-muted-foreground font-black uppercase tracking-widest opacity-40">
-                        {t("codeExpires")}
-                      </p>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+                      <Input
+                        required
+                        autoComplete={mode === "activate" ? "new-password" : "current-password"}
+                        type={showPassword ? "text" : "password"}
+                        disabled={isProcessing}
+                        placeholder="••••••••"
+                        className="h-14 rounded-2xl border-border/60 bg-muted/40 pl-11 pr-12 text-base font-semibold transition-all focus:bg-white focus-visible:ring-primary"
+                        value={authData.password}
+                        onChange={(e) => { setAuthError(null); setAuthData({ ...authData, password: e.target.value }); }}
+                      />
+                      <button
+                        type="button"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        disabled={isProcessing}
+                        className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-muted-foreground/70 transition-colors hover:text-primary disabled:opacity-50"
+                        onClick={() => setShowPassword((current) => !current)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
                     </div>
-                  )}
+                  </div>
+                </>
+              )}
 
-                  {mode === "reset" && (
-                    <div className="space-y-8 animate-in slide-in-from-bottom-2">
-                      <div className="bg-green-50 p-6 rounded-3xl border border-green-100 flex flex-col items-center gap-2 text-center">
-                        <div className="p-2 bg-green-100 rounded-full text-green-600 mb-1">
-                          <CheckCircle2 className="w-6 h-6" />
-                        </div>
-                        <h4 className="text-sm font-black text-green-900 uppercase tracking-tight">
-                          {t("identityVerified")}
-                        </h4>
-                        <p className="text-[11px] text-green-800 font-medium">
-                          {t("resetIdentityDesc")}
-                        </p>
-                      </div>
+              {mode === "activate" && (
+                <div className="space-y-2 animate-in slide-in-from-top-2">
+                  <Label className="text-xs font-bold text-foreground/80">{t("confirmPasswordLabel")}</Label>
+                  <div className="relative">
+                    <ShieldCheck className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+                    <Input
+                      required
+                      autoComplete="new-password"
+                      type={showConfirmPassword ? "text" : "password"}
+                      disabled={isProcessing}
+                      placeholder="••••••••"
+                      className="h-14 rounded-2xl border-border/60 bg-muted/40 pl-11 pr-12 text-base font-semibold transition-all focus:bg-white focus-visible:ring-primary"
+                      value={authData.confirmPassword}
+                      onChange={(e) =>
+                        setAuthData({ ...authData, confirmPassword: e.target.value })
+                      }
+                    />
+                    <button
+                      type="button"
+                      aria-label={showConfirmPassword ? "Hide password confirmation" : "Show password confirmation"}
+                      disabled={isProcessing}
+                      className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-muted-foreground/70 transition-colors hover:text-primary disabled:opacity-50"
+                      onClick={() => setShowConfirmPassword((current) => !current)}
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
 
-                      <div className="space-y-6">
-                        <div className="space-y-3">
-                          <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-[0.2em] ml-1">
-                            {t("newSecurePassword")}
-                          </Label>
-                          <Input
-                            required
-                            autoComplete="new-password"
-                            type="password"
-                            disabled={isProcessing}
-                            className="h-14 bg-accent/30 border-none rounded-2xl shadow-inner focus:bg-white px-6 font-bold text-center text-lg"
-                            value={authData.newPassword}
-                            onChange={(e) =>
-                              setAuthData({ ...authData, newPassword: e.target.value })
-                            }
-                          />
-                        </div>
-                        <div className="space-y-3">
-                          <Label className="text-[10px] uppercase font-black text-muted-foreground tracking-[0.2em] ml-1">
-                            {t("confirmNewPasswordLabel")}
-                          </Label>
-                          <Input
-                            required
-                            autoComplete="new-password"
-                            type="password"
-                            disabled={isProcessing}
-                            className="h-14 bg-accent/30 border-none rounded-2xl shadow-inner focus:bg-white px-6 font-bold text-center text-lg"
-                            value={authData.resetConfirmPassword}
-                            onChange={(e) =>
-                              setAuthData({ ...authData, resetConfirmPassword: e.target.value })
-                            }
-                          />
-                        </div>
-                      </div>
+              {mode === "otp" && (
+                <div className="space-y-4 animate-in zoom-in-95">
+                  <div className="space-y-2">
+                    <Label className="block text-center text-xs font-bold text-foreground/80">
+                      {t("sixDigitVerificationCode")}
+                    </Label>
+                    <Input
+                      required
+                      autoComplete="one-time-code"
+                      disabled={isProcessing}
+                      className="h-16 rounded-2xl border-border/60 bg-muted/40 text-center text-3xl font-black tracking-[0.4em] transition-all focus:bg-white focus-visible:ring-primary"
+                      maxLength={6}
+                      value={authData.otp}
+                      onChange={(e) => setAuthData({ ...authData, otp: e.target.value })}
+                    />
+                  </div>
+                  <p className="text-center text-[11px] font-semibold text-muted-foreground/70">
+                    {t("codeExpires")}
+                  </p>
+                </div>
+              )}
+
+              {mode === "reset" && (
+                <div className="space-y-5 animate-in slide-in-from-bottom-2">
+                  <div className="flex flex-col items-center gap-1.5 rounded-2xl border border-green-100 bg-green-50 p-5 text-center">
+                    <div className="mb-1 rounded-full bg-green-100 p-2 text-green-600">
+                      <CheckCircle2 className="h-5 w-5" />
                     </div>
-                  )}
+                    <h4 className="text-sm font-black text-green-900">{t("identityVerified")}</h4>
+                    <p className="text-[11px] font-medium text-green-800">{t("resetIdentityDesc")}</p>
+                  </div>
 
-                  <Button
-                    type="submit"
-                    disabled={isProcessing}
-                    className={cn(
-                      "w-full h-16 text-sm font-black uppercase tracking-widest shadow-2xl rounded-[1.5rem] transition-all active:scale-95 mt-6 gap-3",
-                      mode === "login"
-                        ? "bg-primary hover:bg-primary/90 text-white"
-                        : "bg-secondary text-primary hover:bg-secondary/90"
-                    )}
-                  >
-                    {isProcessing ? (
-                      <>
-                        <Loader2 className="w-6 h-6 animate-spin" />
-                        {mode === "login"
-                          ? t("authenticating")
-                          : t("processing")}
-                      </>
-                    ) : mode === "login" ? (
-                      t("openDashboard")
-                    ) : mode === "activate" ? (
-                      t("activateAccountCta")
-                    ) : mode === "forgot" ? (
-                      t("identifyRecord")
-                    ) : mode === "otp" ? (
-                      t("verifySecurity")
-                    ) : (
-                      t("commitReset")
-                    )}
-                  </Button>
-                </form>
-              </CardContent>
-              <CardFooter className="pb-10 pt-4 flex flex-col gap-3 px-10">
-                {mode === "login" ? (
-                  <button
-                    type="button"
-                    disabled={isProcessing}
-                    className="w-full text-[10px] font-black uppercase tracking-widest text-primary/40 hover:text-primary transition-all h-12 flex items-center justify-center gap-2 disabled:opacity-50"
-                    onClick={() => switchMode("activate")}
-                  >
-                    {t("dontHaveAccount")}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={isProcessing}
-                    className="w-full text-[10px] font-black uppercase tracking-widest text-primary/40 hover:text-primary transition-all h-12 flex items-center justify-center gap-2 disabled:opacity-50"
-                    onClick={() => switchMode("login")}
-                  >
-                    <ArrowLeft className="w-4 h-4" /> {t("alreadyHaveAccount")}
-                  </button>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-foreground/80">{t("newSecurePassword")}</Label>
+                    <Input
+                      required
+                      autoComplete="new-password"
+                      type="password"
+                      disabled={isProcessing}
+                      className="h-14 rounded-2xl border-border/60 bg-muted/40 px-5 text-base font-semibold transition-all focus:bg-white focus-visible:ring-primary"
+                      value={authData.newPassword}
+                      onChange={(e) =>
+                        setAuthData({ ...authData, newPassword: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold text-foreground/80">{t("confirmNewPasswordLabel")}</Label>
+                    <Input
+                      required
+                      autoComplete="new-password"
+                      type="password"
+                      disabled={isProcessing}
+                      className="h-14 rounded-2xl border-border/60 bg-muted/40 px-5 text-base font-semibold transition-all focus:bg-white focus-visible:ring-primary"
+                      value={authData.resetConfirmPassword}
+                      onChange={(e) =>
+                        setAuthData({ ...authData, resetConfirmPassword: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                disabled={isProcessing}
+                className={cn(
+                  "mt-2 h-14 w-full gap-2 rounded-2xl text-sm font-bold shadow-lg shadow-primary/20 transition-all active:scale-[0.98]",
+                  mode === "login"
+                    ? "bg-primary text-white hover:bg-primary/90"
+                    : "bg-secondary text-primary hover:bg-secondary/90"
                 )}
-              </CardFooter>
-            </>
-          )}
-        </Card>
-        {/* Community Portal link intentionally excluded from the desktop app. */}
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    {mode === "login" ? t("authenticating") : t("processing")}
+                  </>
+                ) : (
+                  <>
+                    {mode === "login"
+                      ? t("openDashboard")
+                      : mode === "activate"
+                        ? t("activateAccountCta")
+                        : mode === "forgot"
+                          ? t("identifyRecord")
+                          : mode === "otp"
+                            ? t("verifySecurity")
+                            : t("commitReset")}
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-6 border-t border-border/50 pt-5">
+              {mode === "login" ? (
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  className="flex w-full items-center justify-center gap-1.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-primary disabled:opacity-50"
+                  onClick={() => switchMode("activate")}
+                >
+                  {t("dontHaveAccount")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isProcessing}
+                  className="flex w-full items-center justify-center gap-1.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-primary disabled:opacity-50"
+                  onClick={() => switchMode("login")}
+                >
+                  <ArrowLeft className="h-4 w-4" /> {t("alreadyHaveAccount")}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

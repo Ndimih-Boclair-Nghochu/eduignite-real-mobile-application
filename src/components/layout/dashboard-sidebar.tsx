@@ -59,19 +59,18 @@ const EXECUTIVE_ROLES: UserRole[] = ["SUPER_ADMIN", "CEO", "CTO", "COO", "INV", 
 const BLOG_ROLES: UserRole[] = ["SUPER_ADMIN", "CEO", "CTO", "COO", "INV", "DESIGNER"];
 const STAFF_ROLES: UserRole[] = ["TEACHER", "BURSAR", "LIBRARIAN"];
 
-export function DashboardSidebar({ onClose }: SidebarProps) {
-  const pathname = usePathname();
-  const { user, logout, platformSettings } = useAuth();
+/**
+ * The full role-filtered navigation registry. Shared by the (legacy) sidebar
+ * and the mobile Workspace grid so both always expose the same tabs.
+ */
+export function useDashboardRoutes() {
+  const { user } = useAuth();
   const { t, language } = useI18n();
   const normalizedRole = ((user?.role || "").trim().toUpperCase() as UserRole) || undefined;
 
-  const isSuperAdmin = EXECUTIVE_ROLES.includes(normalizedRole as UserRole);
   const isDesigner = normalizedRole === "DESIGNER";
   const isBursar = normalizedRole === "BURSAR";
   const isSchoolAdmin = normalizedRole === "SCHOOL_ADMIN" || normalizedRole === "SUB_ADMIN";
-  const schoolLogo = resolveMediaUrl(user?.school?.logo);
-  const userAvatar = resolveMediaUrl(user?.avatar);
-  const platformLogo = resolvePlatformLogoUrl(platformSettings.logo);
 
   const routes = [
     {
@@ -371,7 +370,19 @@ export function DashboardSidebar({ onClose }: SidebarProps) {
     },
   ];
 
-  const filteredRoutes = routes.filter((route) => route.roles.includes(normalizedRole || ""));
+  return routes.filter((route) => route.roles.includes(normalizedRole || ""));
+}
+
+export function DashboardSidebar({ onClose }: SidebarProps) {
+  const pathname = usePathname();
+  const { user, logout, platformSettings } = useAuth();
+  const { t } = useI18n();
+  const normalizedRole = ((user?.role || "").trim().toUpperCase() as UserRole) || undefined;
+  const isSuperAdmin = EXECUTIVE_ROLES.includes(normalizedRole as UserRole);
+  const schoolLogo = resolveMediaUrl(user?.school?.logo);
+  const userAvatar = resolveMediaUrl(user?.avatar);
+  const platformLogo = resolvePlatformLogoUrl(platformSettings.logo);
+  const filteredRoutes = useDashboardRoutes();
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden border-r border-white/10 bg-primary text-white">

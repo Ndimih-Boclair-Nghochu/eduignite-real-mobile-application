@@ -94,3 +94,25 @@
     overscroll-behavior-x: contain;
   }
 }
+
+/* ---- Branding splash (post-login) animations ---- */
+@keyframes ei-pop-in {
+  0% { opacity: 0; transform: scale(0.6) translateY(14px); }
+  60% { opacity: 1; transform: scale(1.06) translateY(0); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes ei-rise-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ei-progress-fill {
+  from { width: 0%; }
+  to { width: 100%; }
+}
+
+.ei-splash-logo { animation: ei-pop-in 0.9s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.ei-splash-name { animation: ei-rise-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.45s both; }
+.ei-splash-tagline { animation: ei-rise-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.8s both; }
+.ei-splash-progress { animation: ei-progress-fill 2.6s ease-in-out 0.5s both; }

@@ -70,8 +70,10 @@ export const chatService = {
 
   /**
    * Send a message with a picture or document attached. Same endpoint as
-   * sendMessage — the backend Message model accepts multipart uploads on its
-   * `attachment` FileField with message_type "image" or "file".
+   * sendMessage, but the file travels as a base64 data URL in JSON
+   * (attachment_data/attachment_name) — the native HTTP layer used by the
+   * mobile shell cannot transmit multipart form-data, which surfaced as
+   * request errors when attaching files.
    */
   async sendAttachmentMessage(
     conversationId: string,
@@ -79,13 +81,18 @@ export const chatService = {
     text = ''
   ): Promise<Message> {
     const isImage = file.type.startsWith('image/');
-    const form = new FormData();
-    form.append('conversation_id', conversationId);
-    form.append('text', text || (isImage ? '📷 Photo' : `📄 ${file.name}`));
-    form.append('message_type', isImage ? 'image' : 'file');
-    form.append('attachment', file, file.name);
-    const { data } = await apiClient.post(API.CHAT.MESSAGES_BASE, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('Could not read the selected file.'));
+      reader.readAsDataURL(file);
+    });
+    const { data } = await apiClient.post(API.CHAT.MESSAGES_BASE, {
+      conversation_id: conversationId,
+      text: text || (isImage ? '📷 Photo' : `📄 ${file.name}`),
+      message_type: isImage ? 'image' : 'file',
+      attachment_data: dataUrl,
+      attachment_name: file.name,
     });
     return data;
   },

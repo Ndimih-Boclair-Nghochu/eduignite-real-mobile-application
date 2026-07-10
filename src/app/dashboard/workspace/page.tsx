@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useAuth, type UserRole } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { useDashboardRoutes } from "@/components/layout/dashboard-sidebar";
-import { ChevronRight, HandHeart, PlaySquare, Quote } from "lucide-react";
+import { CalendarDays, ChevronRight, HandHeart, PlaySquare, Quote } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const EXECUTIVE_ROLES: UserRole[] = ["SUPER_ADMIN", "CEO", "CTO", "COO", "INV", "DESIGNER"];
@@ -45,6 +45,16 @@ export default function MobileWorkspacePage() {
   // same features, now first-class workspace destinations (school roles only,
   // matching the footer's previous visibility).
   const isPlatformExecutive = EXECUTIVE_ROLES.includes(user?.role as UserRole);
+  const isSchoolAdmin = ["SCHOOL_ADMIN", "SUB_ADMIN"].includes(user?.role || "");
+  const adminTiles = isSchoolAdmin
+    ? [
+        {
+          href: "/dashboard/school-events",
+          label: language === "en" ? "Events" : "Événements",
+          icon: CalendarDays,
+        },
+      ]
+    : [];
   const engagementTiles = isPlatformExecutive
     ? []
     : [
@@ -64,7 +74,7 @@ export default function MobileWorkspacePage() {
           icon: Quote,
         },
       ];
-  const allTiles = [...tiles, ...engagementTiles];
+  const allTiles = [...tiles, ...adminTiles, ...engagementTiles];
 
   return (
     <div className="pb-4">

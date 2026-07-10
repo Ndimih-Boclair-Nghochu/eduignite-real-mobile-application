@@ -1,22 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { useStudents } from "@/lib/hooks/useStudents";
 import { useUsers } from "@/lib/hooks/useUsers";
-import { usePublicEvents } from "@/lib/hooks/usePlatform";
+import { apiClient } from "@/lib/api/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { resolveMediaUrl } from "@/lib/media";
 import { cn } from "@/lib/utils";
-import {
-  CalendarDays,
-  Image as ImageIcon,
-  Loader2,
-  PlayCircle,
-  Search,
-  Users,
-} from "lucide-react";
+import { CalendarDays, Loader2, Search, Users } from "lucide-react";
 
 /**
  * Community tab: a searchable directory of the school — Students, Staff,
@@ -125,7 +119,13 @@ export default function CommunityHubPage() {
     page_size: 300,
   } as any);
   const parentsQuery = useUsers({ role: "PARENT", page_size: 300 } as any);
-  const eventsQuery = usePublicEvents();
+  // School events posted by this school's administration (not platform-wide
+  // EduIgnite events) — same feed the admin manages in the Events grid.
+  const eventsQuery = useQuery({
+    queryKey: ["school-events"],
+    queryFn: async () =>
+      normalizeList((await apiClient.get("/schools/events/", { params: { page_size: 200 } })).data),
+  });
 
   const students = useMemo(() => normalizeList(studentsQuery.data), [studentsQuery.data]);
   const staff = useMemo(() => normalizeList(staffQuery.data), [staffQuery.data]);
@@ -194,10 +194,9 @@ export default function CommunityHubPage() {
   );
 
   const filteredEvents = useMemo(() => {
-    const list = events.filter((e: any) => matches(e.title, e.description));
-    // The API returns events by display order; "recent" surfaces the newest
-    // additions first by reversing that order.
-    return eventOrder === "recent" ? [...list].reverse() : list;
+    const list = events.filter((e: any) => matches(e.title, e.description, e.location));
+    // The backend returns school events newest-first (ordering -created_at).
+    return eventOrder === "recent" ? list : [...list].reverse();
   }, [events, eventOrder, query]);
 
   const isLoading =
@@ -364,44 +363,49 @@ export default function CommunityHubPage() {
           </div>
         )
       ) : filteredEvents.length === 0 ? (
-        <EmptyState label="No events yet" />
+        <EmptyState label="No school events yet" />
       ) : (
         <div className="space-y-3">
           {filteredEvents.map((event: any) => (
-            <a
+            <div
               key={event.id}
-              href={event.url || undefined}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-black/[0.03]"
+              className="overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-black/[0.03]"
             >
-              {event.type === "image" && event.url ? (
-                <img
-                  src={resolveMediaUrl(event.url)}
-                  alt={event.title}
-                  className="h-40 w-full object-cover"
-                />
+              {event.image ? (
+                <img src={event.image} alt={event.title} className="h-40 w-full object-cover" />
               ) : null}
               <div className="flex items-start gap-3 p-4">
                 <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
-                  {event.type === "video" ? (
-                    <PlayCircle className="h-5 w-5 text-primary" />
-                  ) : event.type === "image" ? (
-                    <ImageIcon className="h-5 w-5 text-primary" />
-                  ) : (
-                    <CalendarDays className="h-5 w-5 text-primary" />
-                  )}
+                  <CalendarDays className="h-5 w-5 text-primary" />
                 </span>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-black leading-snug text-foreground">
                     {event.title}
                   </p>
-                  <p className="mt-0.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                    {event.description}
-                  </p>
+                  {event.description ? (
+                    <p className="mt-0.5 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+                      {event.description}
+                    </p>
+                  ) : null}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                    {event.event_date ? (
+                      <span className="text-[11px] font-bold text-primary">
+                        {new Date(event.event_date).toLocaleDateString([], {
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                        })}
+                      </span>
+                    ) : null}
+                    {event.location ? (
+                      <span className="text-[11px] font-semibold text-muted-foreground">
+                        📍 {event.location}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               </div>
-            </a>
+            </div>
           ))}
         </div>
       )}

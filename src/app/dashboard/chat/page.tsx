@@ -148,14 +148,21 @@ const attachmentName = (url: string) => {
   }
 };
 
-type ListFilter = "all" | "unread" | "read" | "groups";
+type ListFilter = "all" | "unread" | "groups" | "teachers";
 
 const LIST_FILTERS: { id: ListFilter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "unread", label: "Unread" },
-  { id: "read", label: "Read" },
   { id: "groups", label: "Groups" },
+  { id: "teachers", label: "Teachers" },
 ];
+
+const prettyRole = (role?: string) =>
+  (role || "")
+    .toLowerCase()
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
 
 export default function ChatPage() {
   const { user } = useAuth();
@@ -266,7 +273,9 @@ export default function ChatPage() {
 
   useEffect(() => {
     loadConversations();
-  }, [loadConversations]);
+    // Related users power the "New Chat" quick row and the Teachers filter.
+    loadComposerData();
+  }, [loadConversations, loadComposerData]);
 
   useEffect(() => {
     if (!selectedConv) {
@@ -472,12 +481,26 @@ export default function ChatPage() {
     );
   });
 
+  // User-role lookup from the related-users roster (participant.role only
+  // holds the conversation role, not the account role).
+  const roleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const record of availableUsers) map.set(String(record.id), String(record.role || ""));
+    return map;
+  }, [availableUsers]);
+
   const visibleConversations = useMemo(() => {
     const query = listSearch.trim().toLowerCase();
     return conversations.filter((conversation: any) => {
       if (listFilter === "unread" && !(conversation.unread_count > 0)) return false;
-      if (listFilter === "read" && conversation.unread_count > 0) return false;
       if (listFilter === "groups" && conversation.conversation_type === "direct") return false;
+      if (listFilter === "teachers") {
+        if (conversation.conversation_type !== "direct") return false;
+        const other = (conversation.participants || []).find(
+          (participant: any) => String(getParticipantId(participant)) !== String(user?.id)
+        );
+        if (!other || roleById.get(String(getParticipantId(other))) !== "TEACHER") return false;
+      }
       if (!query) return true;
       const display = getConversationDisplay(conversation, user?.id);
       return (
@@ -485,7 +508,7 @@ export default function ChatPage() {
         (conversation.last_message || "").toLowerCase().includes(query)
       );
     });
-  }, [conversations, listFilter, listSearch, user?.id]);
+  }, [conversations, listFilter, listSearch, user?.id, roleById]);
 
   const currentConversationDisplay = selectedConv ? getConversationDisplay(selectedConv, user?.id) : null;
   const selectedClassOption = teacherGroupOptions.find((item) => item.id === groupForm.schoolClass);
@@ -504,14 +527,19 @@ export default function ChatPage() {
     <div className="pb-2">
       {/* ------------------------------------------------ conversation list */}
       <div className={cn(selectedConv && "hidden")}>
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-black tracking-tight text-foreground">
-            {isExecutive ? "Board Chat" : t("chat")}
-          </h1>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-[26px] font-black tracking-tight text-foreground">
+              {isExecutive ? "Board Chat" : "Messages"}
+            </h1>
+            <p className="mt-0.5 text-[13px] font-medium text-muted-foreground">
+              Stay connected and never miss a thing.
+            </p>
+          </div>
           <Button
             size="icon"
             onClick={handleOpenNewChat}
-            className="h-10 w-10 rounded-full bg-primary text-white shadow-md"
+            className="h-11 w-11 rounded-full bg-primary text-white shadow-lg"
             aria-label="New chat"
           >
             <Plus className="h-5 w-5" />
@@ -536,7 +564,7 @@ export default function ChatPage() {
               className={cn(
                 "shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition-all",
                 listFilter === filter.id
-                  ? "bg-primary text-white shadow-sm"
+                  ? "bg-primary/15 text-primary ring-1 ring-primary/30"
                   : "bg-white text-muted-foreground ring-1 ring-black/[0.05]"
               )}
             >
@@ -545,14 +573,54 @@ export default function ChatPage() {
           ))}
         </div>
 
-        <div className="mt-2">
+        {/* New Chat quick row — people connected to your account */}
+        {availableUsers.length > 0 && (
+          <div className="mt-3">
+            <h2 className="text-[15px] font-black tracking-tight text-foreground">New Chat</h2>
+            <div className="-mx-1 mt-2 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
+              {availableUsers.slice(0, 12).map((record: any) => (
+                <button
+                  key={record.id}
+                  onClick={() => handleStartConversation(record)}
+                  disabled={isStartingChat === String(record.id)}
+                  className="flex w-[86px] shrink-0 flex-col items-center gap-1.5 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/[0.03] active:scale-[0.97]"
+                >
+                  <span className="relative">
+                    <Avatar className="h-12 w-12">
+                      <AvatarImage src={resolveMediaUrl(record.avatar) || ""} />
+                      <AvatarFallback className="bg-primary/10 font-black text-primary">
+                        {(record.name || "?").charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
+                    {isStartingChat === String(record.id) ? (
+                      <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-white shadow">
+                        <Loader2 className="h-3 w-3 animate-spin text-primary" />
+                      </span>
+                    ) : (
+                      <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
+                    )}
+                  </span>
+                  <span className="w-full truncate text-center text-[11.5px] font-bold leading-tight text-foreground">
+                    {(record.name || "").split(" ").slice(0, 2).join(" ")}
+                  </span>
+                  <span className="w-full truncate text-center text-[10px] leading-none text-muted-foreground">
+                    {prettyRole(record.role)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-3">
+          <h2 className="text-[15px] font-black tracking-tight text-foreground">Messages</h2>
           {isLoadingConvs && (
             <div className="flex justify-center py-14">
               <Loader2 className="h-6 w-6 animate-spin text-primary/30" />
             </div>
           )}
           {convsErrorMsg && !isLoadingConvs && (
-            <div className="space-y-3 rounded-3xl bg-white p-6 text-center shadow-sm">
+            <div className="mt-2 space-y-3 rounded-3xl bg-white p-6 text-center shadow-sm">
               <AlertCircle className="mx-auto h-6 w-6 text-destructive" />
               <p className="text-xs font-bold text-destructive">{translateText("Failed to load conversations")}</p>
               <Button size="sm" variant="outline" onClick={loadConversations} className="gap-2">
@@ -561,7 +629,7 @@ export default function ChatPage() {
             </div>
           )}
           {!isLoadingConvs && !convsErrorMsg && visibleConversations.length === 0 && (
-            <div className="space-y-2 rounded-3xl bg-white py-12 text-center shadow-sm">
+            <div className="mt-2 space-y-2 rounded-3xl bg-white py-12 text-center shadow-sm">
               <MessageCircle className="mx-auto h-9 w-9 text-primary/20" />
               <p className="text-sm font-semibold text-muted-foreground">
                 {listFilter === "all" ? t("noConversations") : "Nothing here yet"}
@@ -574,7 +642,7 @@ export default function ChatPage() {
             </div>
           )}
 
-          <div className="divide-y divide-border/50 overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-black/[0.03]">
+          <div className="mt-2 space-y-2">
             {visibleConversations.map((conversation: any) => {
               const display = getConversationDisplay(conversation, user?.id);
               const unread = Number(conversation.unread_count || 0);
@@ -583,14 +651,14 @@ export default function ChatPage() {
                 <button
                   key={conversation.id}
                   onClick={() => setSelectedConv(conversation)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors active:bg-accent/40"
+                  className="flex w-full items-center gap-3 rounded-2xl bg-white px-3.5 py-3 text-left shadow-sm ring-1 ring-black/[0.03] transition-transform active:scale-[0.99]"
                 >
                   <Avatar className="h-12 w-12 shrink-0">
                     <AvatarImage src={display.avatar || ""} />
                     <AvatarFallback
                       className={cn(
                         "font-black",
-                        isGroup ? "bg-secondary/30 text-primary" : "bg-primary/10 text-primary"
+                        isGroup ? "bg-primary/10 text-primary" : "bg-secondary/30 text-primary"
                       )}
                     >
                       {isGroup ? <Users className="h-5 w-5" /> : display.name?.charAt(0) || "?"}
@@ -613,7 +681,7 @@ export default function ChatPage() {
                     <div className="mt-0.5 flex items-center justify-between gap-2">
                       <p
                         className={cn(
-                          "truncate text-[13px]",
+                          "line-clamp-2 text-[13px] leading-snug",
                           unread > 0 ? "font-semibold text-foreground/80" : "text-muted-foreground"
                         )}
                       >

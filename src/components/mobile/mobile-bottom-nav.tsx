@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, LayoutGrid, MessageCircle, UserRound } from "lucide-react";
+import { Home, LayoutGrid, MessageCircle, Users } from "lucide-react";
 import { useI18n } from "@/lib/i18n-context";
 import { cn } from "@/lib/utils";
 
 /**
  * The four-tab bottom navigation that replaces the hamburger menu:
- * Home · Workspace · Messages · Profile.
+ * Home · Workspace · Messages · Community. (Profile stays one tap away via
+ * the avatar in the top bar.)
  */
 export function MobileBottomNav() {
   const pathname = usePathname();
@@ -34,10 +35,10 @@ export function MobileBottomNav() {
       isActive: pathname.startsWith("/dashboard/chat"),
     },
     {
-      href: "/dashboard/profile",
-      label: language === "en" ? "Profile" : "Profil",
-      icon: UserRound,
-      isActive: pathname.startsWith("/dashboard/profile"),
+      href: "/dashboard/community-hub",
+      label: language === "en" ? "Community" : "Communauté",
+      icon: Users,
+      isActive: pathname.startsWith("/dashboard/community-hub"),
     },
   ];
 

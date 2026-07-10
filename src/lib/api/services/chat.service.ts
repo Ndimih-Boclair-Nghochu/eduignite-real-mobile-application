@@ -68,6 +68,28 @@ export const chatService = {
     return data;
   },
 
+  /**
+   * Send a message with a picture or document attached. Same endpoint as
+   * sendMessage — the backend Message model accepts multipart uploads on its
+   * `attachment` FileField with message_type "image" or "file".
+   */
+  async sendAttachmentMessage(
+    conversationId: string,
+    file: File,
+    text = ''
+  ): Promise<Message> {
+    const isImage = file.type.startsWith('image/');
+    const form = new FormData();
+    form.append('conversation_id', conversationId);
+    form.append('text', text || (isImage ? '📷 Photo' : `📄 ${file.name}`));
+    form.append('message_type', isImage ? 'image' : 'file');
+    form.append('attachment', file, file.name);
+    const { data } = await apiClient.post(API.CHAT.MESSAGES_BASE, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+  },
+
   async markConversationRead(
     conversationIdOrPayload: string | { id: string }
   ): Promise<Conversation> {

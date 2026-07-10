@@ -55,6 +55,9 @@
     width: 100%;
     overflow-x: hidden;
     -webkit-text-size-adjust: 100%;
+    /* Facebook-scale typography: 15px base so rem-based sizes match the
+       familiar mobile reading size (text-base = 15px, text-sm ≈ 13px). */
+    font-size: 15px;
   }
 
   * {

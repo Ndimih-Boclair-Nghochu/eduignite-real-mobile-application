@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useAuth, type UserRole } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { useDashboardRoutes } from "@/components/layout/dashboard-sidebar";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, HandHeart, PlaySquare, Quote } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const EXECUTIVE_ROLES: UserRole[] = ["SUPER_ADMIN", "CEO", "CTO", "COO", "INV", "DESIGNER"];
 
 /**
  * Mobile Workspace tab: every tab from the (former) hamburger menu rendered
@@ -26,6 +29,7 @@ const TINTS = [
 
 export default function MobileWorkspacePage() {
   const { language } = useI18n();
+  const { user } = useAuth();
   const routes = useDashboardRoutes();
 
   // The registry can map several labels to one href across roles; keep the
@@ -36,6 +40,31 @@ export default function MobileWorkspacePage() {
     seen.add(route.href);
     return true;
   });
+
+  // Training, Support and Testimony moved here from the removed footer —
+  // same features, now first-class workspace destinations (school roles only,
+  // matching the footer's previous visibility).
+  const isPlatformExecutive = EXECUTIVE_ROLES.includes(user?.role as UserRole);
+  const engagementTiles = isPlatformExecutive
+    ? []
+    : [
+        {
+          href: "/dashboard/training",
+          label: language === "en" ? "Training" : "Formation",
+          icon: PlaySquare,
+        },
+        {
+          href: "/dashboard/support-us",
+          label: language === "en" ? "Support" : "Soutien",
+          icon: HandHeart,
+        },
+        {
+          href: "/dashboard/testimony",
+          label: language === "en" ? "Testimony" : "Témoignage",
+          icon: Quote,
+        },
+      ];
+  const allTiles = [...tiles, ...engagementTiles];
 
   return (
     <div className="pb-4">
@@ -51,7 +80,7 @@ export default function MobileWorkspacePage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {tiles.map((route, index) => {
+        {allTiles.map((route, index) => {
           const tint = TINTS[index % TINTS.length];
           return (
             <Link

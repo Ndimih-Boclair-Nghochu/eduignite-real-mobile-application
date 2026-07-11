@@ -37,6 +37,9 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
+      - name: Install Firebase Android config (FCM push)
+        run: cp resources/google-services.json android/app/google-services.json
+
       - name: Generate app icons (shield logo)
         run: npx @capacitor/assets generate --android --iconBackgroundColor '#1E3A5F' --iconBackgroundColorDark '#1E3A5F' || echo "icon generation skipped"
 

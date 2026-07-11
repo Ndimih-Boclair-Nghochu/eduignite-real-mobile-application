@@ -26,6 +26,26 @@ const getCapacitorLocalNotifications = () => {
   return cap?.Plugins?.LocalNotifications ?? null;
 };
 
+async function registerNativePush(): Promise<void> {
+  // Real FCM push (delivered even when the app is closed) on devices where
+  // the native PushNotifications plugin is present.
+  const cap = (window as any).Capacitor;
+  const Push = cap?.isNativePlatform?.() ? cap?.Plugins?.PushNotifications : null;
+  if (!Push) return;
+  try {
+    const perm = await Push.requestPermissions();
+    if (perm?.receive !== "granted") return;
+    await Push.addListener("registration", (t: any) => {
+      apiClient
+        .post("/notifications/devices/", { platform: "android", token: t?.value || "" })
+        .catch(() => {});
+    });
+    await Push.register();
+  } catch {
+    /* fall back to the in-app watcher */
+  }
+}
+
 async function requestPermission(): Promise<void> {
   const native = getCapacitorLocalNotifications();
   try {
@@ -83,6 +103,7 @@ export function NotificationWatcher() {
     if (!isAuthenticated || !seenKey) return;
 
     requestPermission();
+    registerNativePush();
 
     const check = async () => {
       if (busyRef.current || (typeof navigator !== "undefined" && !navigator.onLine)) return;

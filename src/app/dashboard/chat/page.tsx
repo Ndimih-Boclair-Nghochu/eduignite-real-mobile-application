@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { chatService } from "@/lib/api/services/chat.service";
+import { BASE_URL, getAccessToken } from "@/lib/api/client";
 import { resolveMediaUrl } from "@/lib/media";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { RelatedChatUser, TeacherGroupClassOption } from "@/lib/api/types";
@@ -782,7 +783,12 @@ export default function ChatPage() {
                   new Date(previous.created_at).toDateString() !== new Date(message.created_at).toDateString();
                 const showSender =
                   isGroup && !isOwn && (!previous || String(getMessageSenderId(previous)) !== String(senderId) || showDaySeparator);
-                const attachmentUrl = message._localPreview || message.attachment_data || (message.attachment ? resolveMediaUrl(message.attachment) : "");
+                const hasRemoteAttachment = Boolean(message.has_attachment || message.attachment_data || message.attachment);
+                    const attachmentUrl =
+                      message._localPreview ||
+                      (hasRemoteAttachment && !message._pending
+                        ? `${BASE_URL}/chat/messages/${message.id}/attachment-file/?jwt=${getAccessToken() || ""}`
+                        : "");
                 const isImage = message.message_type === "image" && attachmentUrl;
                 const isFile = message.message_type === "file" && (attachmentUrl || message._localFileName);
                 const captionIsAuto = /^(ðŸ“· Photo|ðŸ“„ )/.test(message.text || "");
@@ -812,7 +818,7 @@ export default function ChatPage() {
                         )}
 
                         {isImage ? (
-                          <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="block">
+                          <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="block" onClick={(e) => { e.preventDefault(); window.open(attachmentUrl, "_blank"); }}>
                             <img
                               src={attachmentUrl}
                               alt="Photo"

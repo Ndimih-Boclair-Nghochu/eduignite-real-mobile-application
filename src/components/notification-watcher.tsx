@@ -16,7 +16,7 @@ import { apiClient } from "@/lib/api/client";
  * where the standard web Notification API is used instead).
  */
 
-const POLL_MS = 45_000;
+const POLL_MS = 25_000;
 const MAX_TOASTS_PER_POLL = 3;
 const ICON = "/icons/eduignite-icon-192.png";
 
@@ -138,9 +138,11 @@ export function NotificationWatcher() {
     const interval = window.setInterval(check, POLL_MS);
     const onFocus = () => check();
     window.addEventListener("focus", onFocus);
+    window.addEventListener("online", onFocus);
     return () => {
       window.clearInterval(interval);
       window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onFocus);
     };
   }, [isAuthenticated, seenKey]);
 

@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { feesService } from "@/lib/api/services/fees.service";
 import { usersService } from "@/lib/api/services/users.service";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import { generateReceiptPdf } from "@/lib/pdf-branded";
 
 const CURRENCY = "XAF";
 
@@ -293,29 +294,34 @@ export function BursarPayments() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [momoTxn?.external_reference, momoTxn?.status]);
 
+  // Receipts are real branded PDFs — never raw HTML dumps or screen prints.
+  const receiptPdfOptions = (print: boolean) => ({
+    schoolName,
+    title: receipt?.fee_structure ? "OFFICIAL FEE RECEIPT" : "PLATFORM CHARGE RECEIPT",
+    lines: [
+      ["Receipt No.", receipt?.receipt_number || receipt?.reference_number || "PENDING"],
+      ["Reference", receipt?.reference_number || "—"],
+      ["Student", receipt?.payer_name || "—"],
+      ["Fee Type", receipt?.fee_structure_detail?.name || (receipt?.fee_structure ? "School Fee" : "Platform Charge")],
+      ["Amount Paid", money(receipt?.amount, receipt?.currency || CURRENCY)],
+      ["Method", methodLabel],
+      ["Date", receipt?.payment_date || new Date().toISOString().slice(0, 10)],
+      ["Recorded By", receipt?.bursar_name || "Bursar"],
+      ["Status", (receipt?.status || "confirmed").toUpperCase()],
+    ] as [string, string][],
+    reference: receipt?.reference_number,
+    fileName: `receipt_${receipt?.receipt_number || receipt?.reference_number || "payment"}`,
+    print,
+  });
+
   const printReceipt = () => {
     if (!receipt) return;
-    const html = buildReceiptHtml(receipt, schoolName, methodLabel);
-    const win = window.open("", "_blank", "width=720,height=900");
-    if (!win) return;
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 400);
+    generateReceiptPdf(receiptPdfOptions(true));
   };
 
   const downloadReceipt = () => {
     if (!receipt) return;
-    const html = buildReceiptHtml(receipt, schoolName, methodLabel);
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `receipt_${receipt.receipt_number || receipt.reference_number || "payment"}.html`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    generateReceiptPdf(receiptPdfOptions(false));
   };
 
   return (

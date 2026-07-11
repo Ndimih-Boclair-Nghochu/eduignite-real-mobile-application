@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -32,6 +32,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { BookOpen, ChevronDown, Eye, FileText, KeyRound, Link2, Loader2, Plus, Search, Sparkles, Upload, UserPlus, Users } from "lucide-react";
 import { apiClient } from "@/lib/api/client";
+import { generateBrandedTablePdf } from "@/lib/pdf-branded";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type {
   BulkStudentUploadRequest,
@@ -1749,9 +1750,45 @@ export default function StudentsPage() {
                     Showing {filteredRegistryCards.length} of {registryCards.length} learner{registryCards.length === 1 ? "" : "s"} from the current school registry.
                   </CardDescription>
                 </div>
-                <Badge variant="outline" className="w-fit border-primary/10 px-3 py-1 text-[10px] font-black uppercase text-primary">
-                  Tabular view
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {isAdminRole ? (
+                    <Button
+                      variant="outline"
+                      className="gap-2 rounded-xl border-primary/20 font-bold text-primary"
+                      onClick={() => {
+                        const subSchoolLabel =
+                          adminSubSchoolFilter === "all"
+                            ? "All sub-schools"
+                            : subSchools.find((s: any) => s.id === adminSubSchoolFilter)?.name || "Sub-school";
+                        const classLabel =
+                          adminClassFilter === "all"
+                            ? "All classes"
+                            : filteredAdminClassOptions.find((c: any) => c.id === adminClassFilter)?.name || "Class";
+                        generateBrandedTablePdf({
+                          title: "Student List",
+                          subtitle: `${subSchoolLabel} â€¢ ${classLabel} â€¢ ${filteredRegistryCards.length} students`,
+                          schoolName: user?.school?.name || "EduIgnite",
+                          columns: ["#", "Student Name", "Matricule", "Admission No.", "Class", "Gender"],
+                          rows: filteredRegistryCards.map((s: any, i: number) => [
+                            i + 1,
+                            registryStudentName(s),
+                            s.user?.matricule || "â€”",
+                            s.admissionNumber || "â€”",
+                            s.className || s.studentClass || "â€”",
+                            s.gender || "â€”",
+                          ]),
+                          fileName: `student-list-${classLabel.replace(/\s+/g, "-").toLowerCase()}`,
+                          footnote: `Total: ${filteredRegistryCards.length} student(s)`,
+                        });
+                      }}
+                    >
+                      <FileText className="h-4 w-4" /> Download PDF
+                    </Button>
+                  ) : null}
+                  <Badge variant="outline" className="w-fit border-primary/10 px-3 py-1 text-[10px] font-black uppercase text-primary">
+                    Tabular view
+                  </Badge>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -1927,7 +1964,7 @@ export default function StudentsPage() {
                         {student.user?.name}
                       </CardTitle>
                       <CardDescription className="mt-1 text-xs">
-                        {student.user?.email || "No email"} · {student.admission_number}
+                        {student.user?.email || "No email"} Â· {student.admission_number}
                       </CardDescription>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Badge variant="outline" className="border-primary/10 text-[10px] font-bold uppercase text-primary">
@@ -1967,7 +2004,7 @@ export default function StudentsPage() {
                         <div className="mt-3 flex flex-wrap gap-2">
                           {student.parent_links.map((link) => (
                             <Badge key={link.id} variant="outline" className="border-primary/10 px-3 py-1 text-[10px] font-bold uppercase text-primary">
-                              {link.parent_name} • {formatHierarchyValue(link.relationship)}{link.is_primary ? " • Primary" : ""}
+                              {link.parent_name} â€¢ {formatHierarchyValue(link.relationship)}{link.is_primary ? " â€¢ Primary" : ""}
                             </Badge>
                           ))}
                         </div>
@@ -2095,7 +2132,7 @@ export default function StudentsPage() {
                           {parent.name}
                         </CardTitle>
                         <CardDescription className="mt-1 text-xs">
-                          {parent.email || "No email"} · {parent.matricule || "Pending matricule"}
+                          {parent.email || "No email"} Â· {parent.matricule || "Pending matricule"}
                         </CardDescription>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Badge variant="outline" className="border-primary/10 text-[10px] font-bold uppercase text-primary">
@@ -2114,7 +2151,7 @@ export default function StudentsPage() {
                           <div className="mt-3 flex flex-wrap gap-2">
                             {linkedChildren.map((student) => (
                               <Badge key={`${parent.id}-${student.id}`} variant="outline" className="border-primary/10 px-3 py-1 text-[10px] font-bold uppercase text-primary">
-                                {student.user?.name} · {student.school_class_name || student.student_class}
+                                {student.user?.name} Â· {student.school_class_name || student.student_class}
                               </Badge>
                             ))}
                           </div>
@@ -2163,7 +2200,7 @@ export default function StudentsPage() {
                     <div>
                       <p className="font-bold text-primary">{student.user?.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {student.student_class} · {student.admission_number}
+                        {student.student_class} Â· {student.admission_number}
                       </p>
                     </div>
                     <Badge className="bg-green-100 text-green-700">{student.annual_average}/20</Badge>
@@ -2466,7 +2503,7 @@ export default function StudentsPage() {
                       >
                         <p className="font-bold text-primary">{parent.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {[parent.matricule, parent.phone, parent.email].filter(Boolean).join(" · ") || "Parent account"}
+                          {[parent.matricule, parent.phone, parent.email].filter(Boolean).join(" Â· ") || "Parent account"}
                         </p>
                       </button>
                     ))}
@@ -2640,7 +2677,7 @@ export default function StudentsPage() {
                     <div key={student.id} className="flex items-center justify-between rounded-xl border p-3">
                       <div>
                         <p className="font-bold text-primary">{student.student_class}</p>
-                        <p className="text-xs text-muted-foreground">{student.matricule} · {formatHierarchyValue(student.class_level)}</p>
+                        <p className="text-xs text-muted-foreground">{student.matricule} Â· {formatHierarchyValue(student.class_level)}</p>
                       </div>
                       <Badge variant="outline" className="border-primary/10 font-bold text-primary uppercase">
                         {student.section}
@@ -2651,7 +2688,7 @@ export default function StudentsPage() {
                     <div key={student.id} className="flex items-center justify-between rounded-xl border p-3">
                       <div>
                         <p className="font-bold text-primary">{student.name}</p>
-                        <p className="text-xs text-muted-foreground">{student.matricule} · {student.admission_number}</p>
+                        <p className="text-xs text-muted-foreground">{student.matricule} Â· {student.admission_number}</p>
                       </div>
                       <Button
                         variant="outline"
@@ -2922,7 +2959,7 @@ export default function StudentsPage() {
                         <div>
                           <p className="font-bold text-primary">{student.user?.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            {student.user?.matricule || "Pending matricule"} · {student.school_class_name || student.student_class}
+                            {student.user?.matricule || "Pending matricule"} Â· {student.school_class_name || student.student_class}
                           </p>
                         </div>
                         <Badge className={isSelected ? "bg-primary text-white" : "bg-accent/20 text-primary"}>
@@ -2964,7 +3001,7 @@ export default function StudentsPage() {
             <div className="rounded-2xl border bg-accent/10 p-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Parent Account</p>
               <p className="mt-2 text-lg font-black text-primary">{linkingParent?.name}</p>
-              <p className="text-xs text-muted-foreground">{linkingParent?.matricule || "Pending matricule"} · {linkingParent?.email || "No email"}</p>
+              <p className="text-xs text-muted-foreground">{linkingParent?.matricule || "Pending matricule"} Â· {linkingParent?.email || "No email"}</p>
             </div>
 
             <div className="grid gap-4 md:grid-cols-[1fr,220px]">
@@ -3013,7 +3050,7 @@ export default function StudentsPage() {
                       <div>
                         <p className="font-bold text-primary">{student.user?.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {student.user?.matricule || "Pending matricule"} · {student.school_class_name || student.student_class}
+                          {student.user?.matricule || "Pending matricule"} Â· {student.school_class_name || student.student_class}
                         </p>
                       </div>
                       <Badge className={isSelected ? "bg-primary text-white" : "bg-accent/20 text-primary"}>
@@ -3120,7 +3157,7 @@ export default function StudentsPage() {
             </DialogTitle>
             <DialogDescription className="text-xs">
               Passwords are stored encrypted and can never be read back. Reset it
-              to a fresh one and share it with the student — they can change it
+              to a fresh one and share it with the student â€” they can change it
               afterwards from their profile.
             </DialogDescription>
           </DialogHeader>

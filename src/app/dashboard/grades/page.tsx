@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import { generateBrandedTablePdf } from "@/lib/pdf-branded";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -2184,14 +2185,40 @@ export default function GradeBookPage() {
                   <p className="text-xs font-semibold text-muted-foreground">
                     Enter marks for the whole class, then record everything with one click.
                   </p>
-                  <Button
-                    className="shrink-0 gap-2 rounded-xl font-black uppercase text-[11px] tracking-widest"
-                    onClick={handleSaveAllGrades}
-                    disabled={isSavingAllGrades || Boolean(savingGradeFor)}
-                  >
-                    {isSavingAllGrades ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                    Save All Marks
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button
+                      variant="outline"
+                      className="gap-2 rounded-xl border-primary/20 font-bold text-primary"
+                      onClick={() =>
+                        generateBrandedTablePdf({
+                          title: `Marks Sheet — ${selectedTeacherSubject?.subject_name || "Subject"}`,
+                          subtitle: `${selectedTeacherSubject?.class_name || ""} • ${selectedTeacherSequence?.name || ""} (${selectedTeacherSequence?.academic_year || ""})`,
+                          schoolName: user?.school?.name || "EduIgnite",
+                          columns: ["#", "Student", "Matricule", "Admission No.", "Mark /20", "Remark"],
+                          rows: teacherClassStudents.map((s: any) => [
+                            s.index,
+                            s.name,
+                            s.matricule || "—",
+                            s.admission_number || "—",
+                            existingGradeMap[s.id]?.score ?? gradeDrafts[s.id] ?? "—",
+                            existingGradeMap[s.id]?.comment || gradeCommentDrafts[s.id] || "",
+                          ]),
+                          fileName: `marks-${(selectedTeacherSubject?.class_name || "class").replace(/\s+/g, "-").toLowerCase()}`,
+                          footnote: `Total: ${teacherClassStudents.length} student(s)`,
+                        })
+                      }
+                    >
+                      <FileText className="h-4 w-4" /> Download PDF
+                    </Button>
+                    <Button
+                      className="gap-2 rounded-xl font-black uppercase text-[11px] tracking-widest"
+                      onClick={handleSaveAllGrades}
+                      disabled={isSavingAllGrades || Boolean(savingGradeFor)}
+                    >
+                      {isSavingAllGrades ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                      Save All Marks
+                    </Button>
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
                   <Table>

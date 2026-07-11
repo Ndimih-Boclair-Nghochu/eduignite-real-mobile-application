@@ -70,6 +70,9 @@ export default function IdCardsPage() {
   const studentList = useMemo(() => {
     return (studentsApiData?.results || []).map((s: any) => ({
       id: s.admission_number || s.user?.matricule || s.id,
+      // The full account matricule — this is what the ID card must display,
+      // not the registration/admission number.
+      matricule: s.user?.matricule || '',
       name: s.user?.name || 'Unknown',
       class: s.student_class || 'Unknown',
       section: s.section || 'Unknown',
@@ -154,7 +157,7 @@ export default function IdCardsPage() {
           studentId: student.id,
           studentData: {
             name: student.name,
-            matricule: student.id,
+            matricule: student.matricule || student.id,
             class_level: student.class,
             section: student.section,
             avatar: student.avatar,
@@ -409,7 +412,7 @@ export default function IdCardsPage() {
                             <div className="grid grid-cols-2 gap-4">
                               <div className="space-y-0.5">
                                 <p className="text-[7px] uppercase font-black text-muted-foreground tracking-widest">Matricule</p>
-                                <p className="text-sm font-mono font-black text-secondary">{s.id}</p>
+                                <p className="text-sm font-mono font-black text-secondary">{(s as any).matricule || s.id}</p>
                               </div>
                               <div className="space-y-0.5">
                                 <p className="text-[7px] uppercase font-black text-muted-foreground tracking-widest">Class / Classe</p>

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BadgeCheck, CreditCard, Loader2, Printer, Download, ShieldCheck, Wallet,
-  TrendingUp, Layers, Search, UserCheck, AlertTriangle, ReceiptText, Smartphone,
+  TrendingUp, Layers, Search, UserCheck, AlertTriangle, ReceiptText, Smartphone, Plus,
 } from "lucide-react";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -109,6 +109,9 @@ export function BursarPayments() {
 
   const [studentSearch, setStudentSearch] = useState("");
   const [selectedStudentId, setSelectedStudentId] = useState("");
+  // Inline creation of a new fee type — it appears in the selector at once.
+  const [newFeeTypeOpen, setNewFeeTypeOpen] = useState(false);
+  const [newFeeType, setNewFeeType] = useState({ name: "", amount: "" });
   const [selectedFeeId, setSelectedFeeId] = useState("");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("cash");
@@ -134,6 +137,24 @@ export function BursarPayments() {
   const overviewQuery = useQuery({
     queryKey: ["bursar-financial-overview", schoolId],
     queryFn: () => feesService.getFinancialOverview(),
+  });
+
+  const createFeeTypeMutation = useMutation({
+    mutationFn: async () =>
+      feesService.createFeeStructure({
+        name: newFeeType.name.trim(),
+        amount: Number(newFeeType.amount),
+        role: "STUDENT",
+      } as any),
+    onSuccess: async (created: any) => {
+      toast({ title: "Fee type created", description: `"${newFeeType.name.trim()}" is now available for recording.` });
+      setNewFeeTypeOpen(false);
+      setNewFeeType({ name: "", amount: "" });
+      await queryClient.invalidateQueries({ queryKey: ["bursar-fee-types"] });
+      if (created?.id) setSelectedFeeId(String(created.id));
+    },
+    onError: (error) =>
+      toast({ variant: "destructive", title: "Could not create fee type", description: getApiErrorMessage(error, "Try again.") }),
   });
 
   const students = studentsQuery.data || [];
@@ -492,6 +513,14 @@ export function BursarPayments() {
                           <p className="truncate text-[9px] uppercase text-muted-foreground">{fee.role}</p>
                         </button>
                       ))}
+                      <button
+                        type="button"
+                        onClick={() => setNewFeeTypeOpen(true)}
+                        className="flex flex-col items-center justify-center rounded-xl border border-dashed border-primary/40 p-3 text-primary transition-all hover:bg-primary/5"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span className="mt-1 text-[10px] font-black uppercase">New fee type</span>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -600,6 +629,46 @@ export function BursarPayments() {
           <DialogFooter>
             <Button variant="outline" onClick={() => { setMomoTxn(null); stopPolling(); }}>Close</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New fee type — created by the bursar, immediately selectable */}
+      <Dialog open={newFeeTypeOpen} onOpenChange={setNewFeeTypeOpen}>
+        <DialogContent className="max-w-sm rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="font-black text-primary">New Fee Type</DialogTitle>
+            <DialogDescription className="text-xs">
+              Added fee types appear instantly in the recording list.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Name</Label>
+              <Input
+                value={newFeeType.name}
+                onChange={(e) => setNewFeeType((p) => ({ ...p, name: e.target.value }))}
+                placeholder="e.g. Exam Fees 2026"
+                className="h-11 rounded-xl bg-accent/30 border-none"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Amount ({CURRENCY})</Label>
+              <Input
+                type="number"
+                value={newFeeType.amount}
+                onChange={(e) => setNewFeeType((p) => ({ ...p, amount: e.target.value }))}
+                placeholder="15000"
+                className="h-11 rounded-xl bg-accent/30 border-none"
+              />
+            </div>
+            <Button
+              className="h-12 w-full rounded-2xl font-black uppercase text-xs"
+              disabled={!newFeeType.name.trim() || !Number(newFeeType.amount) || createFeeTypeMutation.isPending}
+              onClick={() => createFeeTypeMutation.mutate()}
+            >
+              {createFeeTypeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Fee Type"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

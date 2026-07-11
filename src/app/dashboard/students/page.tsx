@@ -30,7 +30,8 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { BookOpen, ChevronDown, Eye, FileText, Link2, Loader2, Plus, Search, Sparkles, Upload, UserPlus, Users } from "lucide-react";
+import { BookOpen, ChevronDown, Eye, FileText, KeyRound, Link2, Loader2, Plus, Search, Sparkles, Upload, UserPlus, Users } from "lucide-react";
+import { apiClient } from "@/lib/api/client";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type {
   BulkStudentUploadRequest,
@@ -327,6 +328,29 @@ export default function StudentsPage() {
   const { toast } = useToast();
   const currentSchoolId = getUserSchoolId(user);
   const canManageStudentAdmissions = canManageStudentAdmissionsForRole(user?.role);
+  const isAdminRole = canManageStudentAdmissions;
+  // Password help: stored passwords are hashed, so the admin resets a
+  // forgotten one and gets the new value to share with the student.
+  const [resetPasswordTarget, setResetPasswordTarget] = useState<any | null>(null);
+  const [resetPasswordResult, setResetPasswordResult] = useState<string | null>(null);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const handleResetPassword = async () => {
+    const userId = resetPasswordTarget?.user?.id;
+    if (!userId) return;
+    setIsResettingPassword(true);
+    try {
+      const { data } = await apiClient.post(`/users/${userId}/admin-reset-password/`, {});
+      setResetPasswordResult(String(data?.password || ""));
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Reset failed",
+        description: error?.response?.data?.detail || "The password could not be reset right now.",
+      });
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
   const [searchTerm, setSearchTerm] = useState("");
   const [adminSubSchoolFilter, setAdminSubSchoolFilter] = useState("all");
   const [adminClassFilter, setAdminClassFilter] = useState("all");
@@ -1829,15 +1853,28 @@ export default function StudentsPage() {
                           )}
                         </TableCell>
                         <TableCell className="pr-6 text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-9 rounded-xl border-primary/10 font-bold text-primary"
-                            onClick={() => setViewingStudent(student)}
-                          >
-                            <Eye className="mr-2 h-4 w-4" />
-                            View
-                          </Button>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-9 rounded-xl border-primary/10 font-bold text-primary"
+                              onClick={() => setViewingStudent(student)}
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              View
+                            </Button>
+                            {isAdminRole && student.user?.id ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-9 rounded-xl border-amber-300 font-bold text-amber-700"
+                                onClick={() => setResetPasswordTarget(student)}
+                              >
+                                <KeyRound className="mr-2 h-4 w-4" />
+                                Password
+                              </Button>
+                            ) : null}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -3063,6 +3100,60 @@ export default function StudentsPage() {
               </Card>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Admin password help for students */}
+      <Dialog
+        open={!!resetPasswordTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setResetPasswordTarget(null);
+            setResetPasswordResult(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-black text-primary">
+              <KeyRound className="h-4 w-4" /> Student Password
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Passwords are stored encrypted and can never be read back. Reset it
+              to a fresh one and share it with the student — they can change it
+              afterwards from their profile.
+            </DialogDescription>
+          </DialogHeader>
+          {resetPasswordResult ? (
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-center">
+                <p className="text-[10px] font-black uppercase tracking-widest text-green-700">
+                  New password for {resetPasswordTarget?.user?.name || "student"}
+                </p>
+                <p className="mt-2 select-all font-mono text-2xl font-black tracking-wider text-green-800">
+                  {resetPasswordResult}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                className="h-11 w-full rounded-2xl font-bold"
+                onClick={() => {
+                  navigator.clipboard?.writeText(resetPasswordResult).catch(() => {});
+                  toast({ title: "Copied", description: "Password copied to clipboard." });
+                }}
+              >
+                Copy password
+              </Button>
+            </div>
+          ) : (
+            <Button
+              className="h-12 w-full rounded-2xl font-black uppercase text-xs"
+              onClick={handleResetPassword}
+              disabled={isResettingPassword}
+            >
+              {isResettingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : "Generate new password"}
+            </Button>
+          )}
         </DialogContent>
       </Dialog>
     </div>

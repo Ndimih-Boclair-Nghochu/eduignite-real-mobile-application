@@ -256,6 +256,9 @@ export default function GradeBookPage() {
   const [selectedSequence, setSelectedSequence] = useState("");
   const [viewingDoc, setViewingDoc] = useState<any>(null);
   const [adminView, setAdminView] = useState<"list" | "details">("list");
+  // Report-card class grid: let admins narrow the classes down to one
+  // sub-school (Anglophone / Francophone / custom sections).
+  const [adminSubSchoolFilter, setAdminSubSchoolFilter] = useState("all");
   const [inspectedClass, setInspectedClass] = useState<any>(null);
   const [adminClassResults, setAdminClassResults] = useState<any[]>([]);
   const [adminClassError, setAdminClassError] = useState("");
@@ -1268,6 +1271,72 @@ export default function GradeBookPage() {
     }
   };
 
+  // Save every mark entered in the sheet in one request, so teachers fill
+  // the whole class then commit once instead of saving row by row.
+  const [isSavingAllGrades, setIsSavingAllGrades] = useState(false);
+  const handleSaveAllGrades = async () => {
+    const subjectId = selectedTeacherSubject?.subject_id || selectedSubject;
+    if (!subjectId || !selectedTeacherTermValue || !selectedSequence || !selectedClassSubject) {
+      toast({ title: "Missing selection", description: "Choose the subject, term, and sequence first.", variant: "destructive" });
+      return;
+    }
+    if (!canEditSelectedTeacherTerm) {
+      toast({ title: "Term is view-only", description: "Teachers can only enter or edit marks in the active academic term.", variant: "destructive" });
+      return;
+    }
+
+    const grades: any[] = [];
+    let invalidCount = 0;
+    for (const [studentId, rawValue] of Object.entries(gradeDrafts)) {
+      if (rawValue === undefined || rawValue === "") continue;
+      const score = Number(rawValue);
+      if (Number.isNaN(score) || score < 0 || score > 20) {
+        invalidCount += 1;
+        continue;
+      }
+      grades.push({
+        student: studentId,
+        subject: subjectId,
+        sequence: selectedSequence,
+        score,
+        comment: gradeCommentDrafts[studentId] || "",
+      });
+    }
+    if (grades.length === 0) {
+      toast({ title: "Nothing to save", description: "Enter at least one mark between 0 and 20 first.", variant: "destructive" });
+      return;
+    }
+
+    setIsSavingAllGrades(true);
+    try {
+      const saved = await gradesService.bulkCreateGrades({
+        sequence_id: selectedSequence,
+        class_subject_id: selectedClassSubject,
+        grades,
+      });
+      const savedList = Array.isArray(saved) ? saved : [];
+      setExistingGradeMap((current) => {
+        const next = { ...current };
+        for (const grade of savedList) {
+          const sid = String(grade.student?.id ?? grade.student ?? "");
+          if (sid) next[sid] = grade;
+        }
+        return next;
+      });
+      setEditingGradeRows({});
+      await refreshTeacherClassResults();
+      toast({
+        title: "All marks saved",
+        description: `${grades.length} mark(s) recorded in one batch.${invalidCount ? ` ${invalidCount} invalid entr(ies) were skipped.` : ""}`,
+      });
+    } catch (error: any) {
+      console.error("Error saving all grades:", error);
+      toast({ title: "Failed to save marks", description: getGradeErrorMessage(error), variant: "destructive" });
+    } finally {
+      setIsSavingAllGrades(false);
+    }
+  };
+
   const handleRetry = () => {
     setHasError(false);
     setReloadNonce((current) => current + 1);
@@ -1617,6 +1686,34 @@ export default function GradeBookPage() {
           </CardContent>
         </Card>
 
+        {(() => {
+          const subSchoolOptions = Array.from(
+            new Set(classes.map((cls: any) => cls.subSchoolName || "Main School"))
+          ).sort();
+          if (subSchoolOptions.length <= 1) return null;
+          return (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                Filter by sub-school:
+              </span>
+              {["all", ...subSchoolOptions].map((option) => (
+                <button
+                  key={option}
+                  onClick={() => setAdminSubSchoolFilter(option)}
+                  className={cn(
+                    "rounded-full px-4 py-1.5 text-xs font-bold transition-all",
+                    adminSubSchoolFilter === option
+                      ? "bg-primary text-white shadow-sm"
+                      : "bg-white text-muted-foreground ring-1 ring-black/[0.06]"
+                  )}
+                >
+                  {option === "all" ? "All sub-schools" : option}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3].map((i) => (
@@ -1625,7 +1722,10 @@ export default function GradeBookPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {classes.map((cls) => (
+            {classes.filter((cls: any) =>
+              adminSubSchoolFilter === "all" ||
+              (cls.subSchoolName || "Main School") === adminSubSchoolFilter
+            ).map((cls) => (
               <Card
                 key={cls.id}
                 className="border-none shadow-sm overflow-hidden group hover:shadow-md transition-all bg-white cursor-pointer"
@@ -2080,6 +2180,19 @@ export default function GradeBookPage() {
                     </div>
                   );
                 })() : null}
+                <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-primary/15 bg-primary/5 p-3">
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Enter marks for the whole class, then record everything with one click.
+                  </p>
+                  <Button
+                    className="shrink-0 gap-2 rounded-xl font-black uppercase text-[11px] tracking-widest"
+                    onClick={handleSaveAllGrades}
+                    disabled={isSavingAllGrades || Boolean(savingGradeFor)}
+                  >
+                    {isSavingAllGrades ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Save All Marks
+                  </Button>
+                </div>
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>

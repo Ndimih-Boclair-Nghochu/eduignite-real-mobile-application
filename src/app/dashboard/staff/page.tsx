@@ -33,7 +33,9 @@ import {
   BookOpen,
   GraduationCap,
   FileStack,
+  Pencil,
 } from "lucide-react";
+import { apiClient } from "@/lib/api/client";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -277,6 +279,43 @@ export default function StaffPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [createdStaff, setCreatedStaff] = useState<any>(null);
   const [viewingStaff, setViewingStaff] = useState<any | null>(null);
+
+  // Admin edit of a staff member's information (name, email, phone, whatsapp).
+  const [editingStaff, setEditingStaff] = useState<any | null>(null);
+  const [editStaffForm, setEditStaffForm] = useState({ name: "", email: "", phone: "", whatsapp: "" });
+  const openEditStaff = (staff: any) => {
+    setEditStaffForm({
+      name: staff.name || "",
+      email: staff.email || "",
+      phone: staff.phone || "",
+      whatsapp: staff.whatsapp || "",
+    });
+    setEditingStaff(staff);
+  };
+  const updateStaffMutation = useMutation({
+    mutationFn: async () => {
+      const payload: Record<string, string> = {};
+      (Object.keys(editStaffForm) as (keyof typeof editStaffForm)[]).forEach((key) => {
+        payload[key] = editStaffForm[key].trim();
+      });
+      const { data } = await apiClient.patch(`/users/${editingStaff.id}/`, payload);
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: "Staff updated", description: "The staff member's information has been saved." });
+      setEditingStaff(null);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["staff-detail"] });
+    },
+    onError: (error: any) => {
+      const data = error?.response?.data;
+      const detail =
+        (data && typeof data === "object"
+          ? Object.entries(data).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`).join(" | ")
+          : "") || "The staff member could not be updated.";
+      toast({ variant: "destructive", title: "Update failed", description: detail });
+    },
+  });
 
   const [newRemark, setNewRemark] = useState({
     staffId: "",
@@ -820,6 +859,16 @@ export default function StaffPage() {
                     >
                       <Eye className="h-4 w-4" /> View
                     </Button>
+                    {isAdmin && staffRegistryMode !== "draft" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-2 rounded-xl text-[10px] font-black uppercase tracking-widest border-primary/30 text-primary"
+                        onClick={() => openEditStaff(staff)}
+                      >
+                        <Pencil className="h-4 w-4" /> Edit
+                      </Button>
+                    ) : null}
                     {staffRegistryMode === "draft" ? (
                       <Button
                         size="sm"
@@ -1198,6 +1247,43 @@ export default function StaffPage() {
       </Dialog>
 
       {/* Staff details view */}
+      <Dialog open={!!editingStaff} onOpenChange={(open) => { if (!open) setEditingStaff(null); }}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 font-black text-primary">
+              <Pencil className="h-4 w-4" /> Edit Staff Information
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Update {editingStaff?.name || "this staff member"}&apos;s details. Matricule and role stay unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {([
+              ["name", "Full name"],
+              ["email", "Email"],
+              ["phone", "Phone"],
+              ["whatsapp", "WhatsApp (optional)"],
+            ] as const).map(([key, label]) => (
+              <div key={key} className="space-y-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>
+                <Input
+                  value={editStaffForm[key]}
+                  onChange={(e) => setEditStaffForm((prev) => ({ ...prev, [key]: e.target.value }))}
+                  className="h-11 rounded-xl bg-accent/30 border-none"
+                />
+              </div>
+            ))}
+            <Button
+              className="mt-2 h-12 w-full rounded-2xl font-black uppercase text-xs"
+              onClick={() => updateStaffMutation.mutate()}
+              disabled={updateStaffMutation.isPending || !editStaffForm.name.trim()}
+            >
+              {updateStaffMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!viewingStaff} onOpenChange={(open) => { if (!open) setViewingStaff(null); }}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>

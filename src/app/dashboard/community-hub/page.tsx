@@ -2,22 +2,22 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/lib/auth-context";
-import { useStudents } from "@/lib/hooks/useStudents";
-import { useUsers } from "@/lib/hooks/useUsers";
-import { apiClient } from "@/lib/api/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
+import { apiClient } from "@/lib/api/client";
 import { resolveMediaUrl } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import { CalendarDays, Loader2, Search, Users } from "lucide-react";
 
 /**
- * Community tab: a searchable directory of the school — Students, Staff,
- * Parents and Events — rendered as a professional two-per-row card grid.
- * Students filter by class, staff by role, parents by number of children in
- * the school, events by recency. Built entirely on existing endpoints
- * (students, users, platform events).
+ * Community tab: a searchable directory of the whole school — Students,
+ * Staff, Parents and Events. Reads /schools/community/, which every member
+ * of the school can access (no role restrictions), so students, parents and
+ * staff all see exactly what the school admin sees.
+ *
+ * Ordering: students from the highest class to the lowest, parents from the
+ * most children in the school to the fewest, staff from the highest rank
+ * (administrators) down to teachers.
  */
 
 type Section = "students" | "staff" | "parents" | "events";
@@ -32,9 +32,33 @@ const SECTIONS: { id: Section; label: string }[] = [
 const STAFF_ROLE_LABELS: Record<string, string> = {
   SCHOOL_ADMIN: "Administrator",
   SUB_ADMIN: "Sub-Admin",
-  TEACHER: "Teacher",
   BURSAR: "Bursar",
   LIBRARIAN: "Librarian",
+  TEACHER: "Teacher",
+};
+
+// Highest rank first.
+const STAFF_RANK: Record<string, number> = {
+  SCHOOL_ADMIN: 0,
+  SUB_ADMIN: 1,
+  BURSAR: 2,
+  LIBRARIAN: 3,
+  TEACHER: 4,
+};
+
+/** Cameroon secondary class seniority — bigger = higher class. */
+const classRank = (raw?: string): number => {
+  const value = (raw || "").toLowerCase();
+  if (!value) return 0;
+  if (/upper\s*sixth/.test(value) || /terminale/.test(value)) return 7;
+  if (/lower\s*sixth/.test(value) || /premi[eè]re/.test(value)) return 6;
+  if (/form\s*5/.test(value) || /seconde/.test(value)) return 5;
+  if (/form\s*4/.test(value) || /(troisi[eè]me|3\s*[eè]me)/.test(value)) return 4;
+  if (/form\s*3/.test(value) || /4\s*[eè]me/.test(value)) return 3;
+  if (/form\s*2/.test(value) || /5\s*[eè]me/.test(value)) return 2;
+  if (/form\s*1/.test(value) || /(sixi[eè]me|6\s*[eè]me)/.test(value)) return 1;
+  const numeric = value.match(/\d+/);
+  return numeric ? Number(numeric[0]) : 0;
 };
 
 const normalizeList = (payload: any) => {
@@ -105,7 +129,6 @@ function SubFilterChips({
 }
 
 export default function CommunityHubPage() {
-  const { user } = useAuth();
   const [section, setSection] = useState<Section>("students");
   const [search, setSearch] = useState("");
   const [classFilter, setClassFilter] = useState("all");
@@ -113,47 +136,55 @@ export default function CommunityHubPage() {
   const [childrenFilter, setChildrenFilter] = useState("all");
   const [eventOrder, setEventOrder] = useState("recent");
 
-  const studentsQuery = useStudents({ page_size: 500 } as any);
-  const staffQuery = useUsers({
-    role: "SCHOOL_ADMIN,SUB_ADMIN,TEACHER,BURSAR,LIBRARIAN",
-    page_size: 300,
-  } as any);
-  const parentsQuery = useUsers({ role: "PARENT", page_size: 300 } as any);
-  // School events posted by this school's administration (not platform-wide
-  // EduIgnite events) — same feed the admin manages in the Events grid.
+  // One whole-school directory call — identical data for every role.
+  const directoryQuery = useQuery({
+    queryKey: ["school-community"],
+    queryFn: async () => (await apiClient.get("/schools/community/")).data,
+  });
   const eventsQuery = useQuery({
     queryKey: ["school-events"],
     queryFn: async () =>
       normalizeList((await apiClient.get("/schools/events/", { params: { page_size: 200 } })).data),
   });
 
-  const students = useMemo(() => normalizeList(studentsQuery.data), [studentsQuery.data]);
-  const staff = useMemo(() => normalizeList(staffQuery.data), [staffQuery.data]);
-  const parents = useMemo(() => normalizeList(parentsQuery.data), [parentsQuery.data]);
+  const students = useMemo(
+    () =>
+      [...normalizeList(directoryQuery.data?.students)].sort(
+        (a: any, b: any) =>
+          classRank(b.class_name || b.class_level) - classRank(a.class_name || a.class_level) ||
+          (a.name || "").localeCompare(b.name || "")
+      ),
+    [directoryQuery.data]
+  );
+  const staff = useMemo(
+    () =>
+      [...normalizeList(directoryQuery.data?.staff)].sort(
+        (a: any, b: any) =>
+          (STAFF_RANK[a.role] ?? 9) - (STAFF_RANK[b.role] ?? 9) ||
+          (a.name || "").localeCompare(b.name || "")
+      ),
+    [directoryQuery.data]
+  );
+  const parents = useMemo(
+    () =>
+      [...normalizeList(directoryQuery.data?.parents)].sort(
+        (a: any, b: any) =>
+          (b.children_count || 0) - (a.children_count || 0) ||
+          (a.name || "").localeCompare(b.name || "")
+      ),
+    [directoryQuery.data]
+  );
   const events = useMemo(() => normalizeList(eventsQuery.data), [eventsQuery.data]);
-
-  // Children per parent, computed from the student registry's parent links.
-  const childrenCountByParent = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const student of students) {
-      for (const link of student.parent_links || []) {
-        const id = String(link.parent);
-        counts.set(id, (counts.get(id) || 0) + 1);
-      }
-    }
-    return counts;
-  }, [students]);
 
   const classOptions = useMemo(() => {
     const names = new Set<string>();
     for (const student of students) {
-      const name = student.school_class_name || student.student_class;
-      if (name) names.add(String(name));
+      if (student.class_name) names.add(String(student.class_name));
     }
     return [
       { value: "all", label: "All classes" },
       ...Array.from(names)
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        .sort((a, b) => classRank(b) - classRank(a) || a.localeCompare(b, undefined, { numeric: true }))
         .map((name) => ({ value: name, label: name })),
     ];
   }, [students]);
@@ -165,9 +196,8 @@ export default function CommunityHubPage() {
   const filteredStudents = useMemo(
     () =>
       students.filter((s: any) => {
-        const className = String(s.school_class_name || s.student_class || "");
-        if (classFilter !== "all" && className !== classFilter) return false;
-        return matches(s.user?.name, s.user?.matricule, s.admission_number, className);
+        if (classFilter !== "all" && String(s.class_name || "") !== classFilter) return false;
+        return matches(s.name, s.matricule, s.admission_number, s.class_name);
       }),
     [students, classFilter, query]
   );
@@ -176,7 +206,7 @@ export default function CommunityHubPage() {
     () =>
       staff.filter((m: any) => {
         if (staffRoleFilter !== "all" && m.role !== staffRoleFilter) return false;
-        return matches(m.name, m.matricule, m.email, STAFF_ROLE_LABELS[m.role] || m.role);
+        return matches(m.name, m.matricule, STAFF_ROLE_LABELS[m.role] || m.role);
       }),
     [staff, staffRoleFilter, query]
   );
@@ -184,29 +214,21 @@ export default function CommunityHubPage() {
   const filteredParents = useMemo(
     () =>
       parents.filter((p: any) => {
-        const count = childrenCountByParent.get(String(p.id)) || 0;
+        const count = Number(p.children_count || 0);
         if (childrenFilter === "1" && count !== 1) return false;
         if (childrenFilter === "2" && count !== 2) return false;
         if (childrenFilter === "3+" && count < 3) return false;
-        return matches(p.name, p.matricule, p.email);
+        return matches(p.name, p.matricule);
       }),
-    [parents, childrenFilter, childrenCountByParent, query]
+    [parents, childrenFilter, query]
   );
 
   const filteredEvents = useMemo(() => {
     const list = events.filter((e: any) => matches(e.title, e.description, e.location));
-    // The backend returns school events newest-first (ordering -created_at).
     return eventOrder === "recent" ? list : [...list].reverse();
   }, [events, eventOrder, query]);
 
-  const isLoading =
-    section === "students"
-      ? studentsQuery.isLoading
-      : section === "staff"
-        ? staffQuery.isLoading
-        : section === "parents"
-          ? parentsQuery.isLoading
-          : eventsQuery.isLoading;
+  const isLoading = section === "events" ? eventsQuery.isLoading : directoryQuery.isLoading;
 
   const totals: Record<Section, { label: string; count: number }> = {
     students: { label: "Total Students", count: filteredStudents.length },
@@ -307,16 +329,16 @@ export default function CommunityHubPage() {
         filteredStudents.length === 0 ? (
           <EmptyState label="No students found" />
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {filteredStudents.map((s: any) => (
               <DirectoryCard
                 key={s.id}
-                avatar={resolveMediaUrl(s.user?.avatar)}
-                name={s.user?.name || "Student"}
+                avatar={resolveMediaUrl(s.avatar)}
+                name={s.name || "Student"}
                 lines={[
-                  `Matricule: ${s.user?.matricule || s.admission_number || "—"}`,
+                  `Matricule: ${s.matricule || s.admission_number || "—"}`,
                   "Student",
-                  `Class: ${s.school_class_name || s.student_class || "—"}`,
+                  `Class: ${s.class_name || "—"}`,
                 ]}
               />
             ))}
@@ -326,7 +348,7 @@ export default function CommunityHubPage() {
         filteredStaff.length === 0 ? (
           <EmptyState label="No staff found" />
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {filteredStaff.map((m: any) => (
               <DirectoryCard
                 key={m.id}
@@ -344,28 +366,25 @@ export default function CommunityHubPage() {
         filteredParents.length === 0 ? (
           <EmptyState label="No parents found" />
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {filteredParents.map((p: any) => {
-              const count = childrenCountByParent.get(String(p.id)) || 0;
-              return (
-                <DirectoryCard
-                  key={p.id}
-                  avatar={resolveMediaUrl(p.avatar)}
-                  name={p.name || "Parent"}
-                  lines={[
-                    `Matricule: ${p.matricule || "—"}`,
-                    "Parent",
-                    `Children: ${count || "—"}`,
-                  ]}
-                />
-              );
-            })}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {filteredParents.map((p: any) => (
+              <DirectoryCard
+                key={p.id}
+                avatar={resolveMediaUrl(p.avatar)}
+                name={p.name || "Parent"}
+                lines={[
+                  `Matricule: ${p.matricule || "—"}`,
+                  "Parent",
+                  `Children: ${p.children_count || 0}`,
+                ]}
+              />
+            ))}
           </div>
         )
       ) : filteredEvents.length === 0 ? (
         <EmptyState label="No school events yet" />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0 xl:grid-cols-3">
           {filteredEvents.map((event: any) => (
             <div
               key={event.id}

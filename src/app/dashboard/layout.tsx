@@ -1,4 +1,4 @@
-
+﻿
 "use client";
 
 import { useAuth, type UserRole } from "@/lib/auth-context";
@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import Link from "next/link";
 import { getLicenseAccessState } from "@/lib/license";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { NotificationWatcher } from "@/components/notification-watcher";
 
 const EXECUTIVE_ROLES: UserRole[] = ["SUPER_ADMIN", "CEO", "CTO", "COO", "INV", "DESIGNER"];
 
@@ -80,6 +81,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-dvh flex-col bg-background">
+      <NotificationWatcher />
       <MobileTopBar />
 
       <div className="flex-1 flex min-h-0 flex-col overflow-hidden">

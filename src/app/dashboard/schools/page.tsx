@@ -671,7 +671,7 @@ export default function SchoolsManagementPage() {
               </div>
             </CardContent>
             
-            <CardFooter className="pt-6 pb-6">
+            <CardFooter className="pt-6 pb-6 flex flex-col gap-2">
               <Button
                 variant={schoolRegistryMode === "draft" ? "default" : "outline"}
                 className="w-full h-11 rounded-xl text-[10px] font-black uppercase tracking-widest gap-2 border-primary/10 text-primary hover:bg-primary/5"
@@ -681,6 +681,16 @@ export default function SchoolsManagementPage() {
                 {schoolRegistryMode === "draft" ? <RotateCcw className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
                 {schoolRegistryMode === "draft" ? "Restore School" : "Node Governance"}
               </Button>
+              {canPermanentlyDelete && schoolRegistryMode === "active" ? (
+                <Button
+                  variant="destructive"
+                  className="w-full h-11 rounded-xl text-[10px] font-black uppercase tracking-widest gap-2"
+                  onClick={() => requestSchoolDelete(school)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete Permanently
+                </Button>
+              ) : null}
             </CardFooter>
           </Card>
         ))}

@@ -96,9 +96,19 @@ const getConversationDisplay = (conversation: any, currentUserId: any) => {
   };
 };
 
-const isGroupAdmin = (conversation: any, currentUserId: string | undefined) =>
-  Array.isArray(conversation?.admin_participant_ids) &&
-  conversation.admin_participant_ids.map(String).includes(String(currentUserId));
+const isGroupAdmin = (conversation: any, currentUserId: string | undefined) => {
+  if (conversation?.is_current_user_admin) return true;
+  if (
+    Array.isArray(conversation?.admin_participant_ids) &&
+    conversation.admin_participant_ids.map(String).includes(String(currentUserId))
+  )
+    return true;
+  // Fall back to the participant records (present on the detail payload).
+  return (conversation?.participants || []).some(
+    (p: any) =>
+      String(p.user_id ?? p.id) === String(currentUserId) && String(p.role).toLowerCase() === "admin"
+  );
+};
 
 // WhatsApp-style helpers -----------------------------------------------------
 
@@ -876,6 +886,8 @@ export default function ChatPage() {
                 const isImage = message.message_type === "image" && attachmentUrl;
                 const isFile = message.message_type === "file" && (attachmentUrl || message._localFileName);
                 const captionIsAuto = (((message.text || "").codePointAt(0)) || 0) > 0xffff;
+                const isTeacherMsg = String(message.sender_role) === "TEACHER";
+                const showSenderHeader = showSender || (isGroup && !isOwn && isTeacherMsg);
 
                 return (
                   <div key={message.id}>
@@ -892,15 +904,16 @@ export default function ChatPage() {
                         className={cn(
                           "relative max-w-[82%] rounded-2xl px-3 py-2 shadow-sm",
                           isOwn ? "rounded-br-md bg-primary text-white" : "rounded-bl-md bg-white text-foreground",
+                          !isOwn && isTeacherMsg && "border-l-4 border-secondary bg-secondary/[0.06]",
                           message.is_official && !isOwn && "ring-1 ring-secondary/60",
                           message._pending && "opacity-70"
                         )}
                       >
-                        {showSender && (
-                          <p className={cn("mb-0.5 flex items-center gap-1.5 text-[12px] font-black leading-none", senderColor(senderId))}>
+                        {showSenderHeader && (
+                          <p className={cn("mb-0.5 flex items-center gap-1.5 text-[12px] font-black leading-none", isTeacherMsg ? "text-secondary" : senderColor(senderId))}>
                             {senderName}
-                            {String(message.sender_role) === "TEACHER" && (
-                              <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-primary">
+                            {isTeacherMsg && (
+                              <span className="rounded-full bg-secondary/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-secondary">
                                 Teacher
                               </span>
                             )}

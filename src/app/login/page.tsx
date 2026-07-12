@@ -50,6 +50,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [resetNotice, setResetNotice] = useState<{ isStudent: boolean; text: string } | null>(null);
 
   const [authData, setAuthData] = useState({
     matricule: "",
@@ -132,11 +133,19 @@ export default function LoginPage() {
         return;
       }
       try {
-        await authService.requestPasswordReset(authData.matricule.trim());
-        setAuthMode("success");
-        toast({ title: "Reset email sent", description: "Check your inbox for a password reset link." });
+        const res: any = await authService.requestPasswordReset(authData.matricule.trim());
+        if (res?.is_student) {
+          setResetNotice({ isStudent: true, text: res.detail || "As a student, you cannot reset your password online. Please see your school administrator to get a new password." });
+          setAuthMode("success");
+          toast({ title: "See your school admin", description: res.detail });
+        } else {
+          setResetNotice({ isStudent: false, text: "" });
+          setAuthMode("success");
+          toast({ title: "Reset email sent", description: "Check your inbox for a password reset link." });
+        }
       } catch {
         // Always show success to avoid leaking whether matricule exists
+        setResetNotice({ isStudent: false, text: "" });
         setAuthMode("success");
         toast({ title: "Reset email sent", description: "If that matricule is registered, a reset link has been sent." });
       } finally {
@@ -230,13 +239,27 @@ export default function LoginPage() {
 
         {mode === "success" ? (
           <div className="rounded-[2rem] bg-white p-8 text-center shadow-xl ring-1 ring-black/[0.04] animate-in zoom-in-95 duration-500">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-green-100 bg-green-50 text-green-600">
-              <Mail className="h-8 w-8" />
-            </div>
-            <h2 className="mt-6 text-xl font-black tracking-tight text-foreground">Check your email</h2>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              A password reset link has been sent to your email address. It expires in 5 minutes.
-            </p>
+            {resetNotice?.isStudent ? (
+              <>
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-amber-100 bg-amber-50 text-amber-600">
+                  <ShieldCheck className="h-8 w-8" />
+                </div>
+                <h2 className="mt-6 text-xl font-black tracking-tight text-foreground">See your school admin</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {resetNotice.text}
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-green-100 bg-green-50 text-green-600">
+                  <Mail className="h-8 w-8" />
+                </div>
+                <h2 className="mt-6 text-xl font-black tracking-tight text-foreground">Check your email</h2>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  A password reset link has been sent to your email address. It expires in 5 minutes.
+                </p>
+              </>
+            )}
             <Button
               onClick={() => switchMode("login")}
               className="mt-8 h-14 w-full rounded-2xl text-sm font-bold shadow-lg transition-all active:scale-[0.98]"

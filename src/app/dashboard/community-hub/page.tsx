@@ -71,19 +71,26 @@ function DirectoryCard({
   avatar,
   name,
   lines,
+  onView,
 }: {
   avatar?: string;
   name: string;
   lines: string[];
+  onView?: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-3xl bg-white p-4 text-center shadow-sm ring-1 ring-black/[0.03]">
-      <Avatar className="h-16 w-16 border-2 border-primary/10">
-        <AvatarImage src={avatar || ""} />
-        <AvatarFallback className="bg-primary/10 text-lg font-black text-primary">
+    <div className="flex flex-col items-center gap-2 rounded-2xl bg-white p-3 text-center shadow-sm ring-1 ring-black/[0.04]">
+      {avatar ? (
+        <img
+          src={avatar}
+          alt={name}
+          className="h-24 w-24 rounded-xl object-cover ring-1 ring-black/[0.06]"
+        />
+      ) : (
+        <div className="flex h-24 w-24 items-center justify-center rounded-xl bg-primary/10 text-3xl font-black text-primary">
           {(name || "?").charAt(0).toUpperCase()}
-        </AvatarFallback>
-      </Avatar>
+        </div>
+      )}
       <p className="w-full truncate text-[13px] font-black leading-tight text-foreground">
         {name}
       </p>
@@ -94,6 +101,14 @@ function DirectoryCard({
           </p>
         ))}
       </div>
+      {onView ? (
+        <button
+          onClick={onView}
+          className="mt-1 w-full rounded-lg bg-primary/10 py-1.5 text-[11px] font-black uppercase tracking-wide text-primary"
+        >
+          View
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -135,6 +150,7 @@ export default function CommunityHubPage() {
   const [staffRoleFilter, setStaffRoleFilter] = useState("all");
   const [childrenFilter, setChildrenFilter] = useState("all");
   const [eventOrder, setEventOrder] = useState("recent");
+  const [viewingStaff, setViewingStaff] = useState<any | null>(null);
 
   // One whole-school directory call — identical data for every role.
   const directoryQuery = useQuery({
@@ -358,6 +374,7 @@ export default function CommunityHubPage() {
                   `Matricule: ${m.matricule || "—"}`,
                   STAFF_ROLE_LABELS[m.role] || m.role || "Staff",
                 ]}
+                onView={m.role === "TEACHER" ? () => setViewingStaff(m) : undefined}
               />
             ))}
           </div>
@@ -428,6 +445,55 @@ export default function CommunityHubPage() {
           ))}
         </div>
       )}
+
+      {viewingStaff ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+          onClick={() => setViewingStaff(null)}
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 bg-primary p-5 text-white">
+              {resolveMediaUrl(viewingStaff.avatar) ? (
+                <img src={resolveMediaUrl(viewingStaff.avatar)} alt={viewingStaff.name} className="h-14 w-14 rounded-xl object-cover" />
+              ) : (
+                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white/20 text-xl font-black">
+                  {(viewingStaff.name || "?").charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="truncate text-lg font-black">{viewingStaff.name}</p>
+                <p className="text-xs text-white/70">{STAFF_ROLE_LABELS[viewingStaff.role] || viewingStaff.role} • {viewingStaff.matricule || "—"}</p>
+              </div>
+            </div>
+            <div className="max-h-[60vh] space-y-2 overflow-y-auto p-5">
+              <p className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">
+                Classes & subjects taught
+              </p>
+              {(viewingStaff.teaching || []).length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No class-subject assignments yet.</p>
+              ) : (
+                (viewingStaff.teaching || []).map((t: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between rounded-xl bg-accent/40 px-4 py-3">
+                    <span className="text-sm font-bold text-foreground">{t.subject_name || "Subject"}</span>
+                    <span className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-black text-primary">{t.class_name || "—"}</span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="border-t p-4">
+              <button
+                onClick={() => setViewingStaff(null)}
+                className="w-full rounded-xl bg-primary py-2.5 text-sm font-black text-white"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

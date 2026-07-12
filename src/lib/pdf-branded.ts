@@ -5,6 +5,25 @@
  */
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { isNativeApp, saveToEduignite } from "@/lib/native-download";
+
+/**
+ * Save a jsPDF document. On the native app the browser download does nothing,
+ * so we write the PDF into the device Documents/eduignite folder instead.
+ */
+function savePdfDoc(doc: jsPDF, rawName: string) {
+  const fileName = rawName.endsWith(".pdf") ? rawName : `${rawName}.pdf`;
+  if (isNativeApp()) {
+    try {
+      const base64 = doc.output("datauristring").split(",")[1] || "";
+      void saveToEduignite({ fileName, base64, mimeType: "application/pdf" });
+      return;
+    } catch {
+      /* fall through to browser save */
+    }
+  }
+  doc.save(fileName);
+}
 
 const PRIMARY: [number, number, number] = [76, 47, 209];
 const INK: [number, number, number] = [29, 27, 51];
@@ -87,7 +106,7 @@ export function generateBrandedTablePdf(options: BrandedTableOptions) {
     const url = doc.output("bloburl");
     window.open(url, "_blank");
   } else {
-    doc.save(options.fileName.endsWith(".pdf") ? options.fileName : `${options.fileName}.pdf`);
+    savePdfDoc(doc, options.fileName);
   }
 }
 
@@ -148,6 +167,6 @@ export function generateReceiptPdf(options: ReceiptOptions) {
     doc.autoPrint();
     window.open(doc.output("bloburl"), "_blank");
   } else {
-    doc.save(options.fileName.endsWith(".pdf") ? options.fileName : `${options.fileName}.pdf`);
+    savePdfDoc(doc, options.fileName);
   }
 }

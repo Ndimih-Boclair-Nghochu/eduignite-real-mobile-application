@@ -5,6 +5,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { useStudents } from "@/lib/hooks/useStudents";
+import { StudentIdCard } from "@/components/student-id-card";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -78,7 +79,9 @@ export default function IdCardsPage() {
       section: s.section || 'Unknown',
       avatar: resolveMediaUrl(s.user?.avatar) || '',
       dob: s.date_of_birth || '',
+      placeOfBirth: s.place_of_birth || '',
       gender: s.gender || '',
+      admissionNumber: s.admission_number || '',
       admissionDate: s.admission_date || '',
       admissionYear: s.admission_date ? String(new Date(s.admission_date).getFullYear()) : '',
       qrCode: s.qr_code || '',
@@ -147,63 +150,10 @@ export default function IdCardsPage() {
       toast({ variant: "destructive", title: "No Students Selected", description: "Please select at least one student to generate IDs." });
       return;
     }
-
-    setIsGeneratingPdf(true);
-    try {
-      const selectedStudentData = studentList.filter((student: any) => selectedStudents.includes(student.id));
-      const result = await pdfGenerationService.generateBatchPDF({
-        type: "id-cards",
-        items: selectedStudentData.map((student: any) => ({
-          studentId: student.id,
-          studentData: {
-            name: student.name,
-            matricule: student.matricule || student.id,
-            class_level: student.class,
-            section: student.section,
-            avatar: student.avatar,
-            date_of_birth: student.dob,
-            gender: student.gender,
-            admission_number: student.id,
-            admission_date: student.admissionDate,
-            guardian_name: student.guardian,
-            guardian_phone: student.guardianPhone,
-            address: student.address,
-            qr_code: student.qrCode,
-            admission_year: student.admissionYear || "Admission year pending",
-            academic_year: student.admissionYear || "Admission year pending",
-          },
-          schoolData: {
-            name: user?.school?.name || "School Name",
-            logo: user?.school?.logo,
-            motto: user?.school?.motto,
-            principal: user?.school?.principal,
-            address: schoolInfo?.address || schoolInfo?.location,
-            phone: schoolInfo?.phone,
-            matricule: schoolInfo?.matricule,
-          },
-          templateId: "standard-cameroon-secondary",
-        })),
-        options: {
-          watermark: { text: "MINESEC - OFFICIAL ID", opacity: 0.1 },
-          quality: "high",
-          compression: true,
-        },
-      });
-
-      if (!result.success || !result.downloadUrl) {
-        throw new Error(result.error || "The PDF could not be generated.");
-      }
-      downloadGeneratedFile(result.downloadUrl, result.fileName);
-      toast({ title: "ID Cards Downloaded", description: `${selectedStudents.length} official ID card(s) were generated as a PDF.` });
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "PDF generation failed",
-        description: error instanceof Error ? error.message : "The ID-card PDF could not be generated.",
-      });
-    } finally {
-      setIsGeneratingPdf(false);
-    }
+    // Save-as-PDF uses the exact on-screen card via the system print dialog, so
+    // the downloaded file is pixel-identical to the preview on every platform.
+    toast({ title: "Preparing PDF", description: "Choose “Save as PDF” in the dialog that opens." });
+    setTimeout(() => window.print(), 250);
   };
 
   const handlePrint = () => {
@@ -364,154 +314,32 @@ export default function IdCardsPage() {
                 const s = studentList.find((item: any) => item.id === id);
                 if (!s) return null;
                 return (
-                  <div key={s.id} className="flex flex-col lg:flex-row gap-8 items-center print:flex-row print:gap-4 print:page-break-after-always">
-                    
-                    {/* FRONT SIDE */}
-                    <div className="relative group card-container">
-                      <Card className="w-[450px] h-[280px] border shadow-xl bg-white overflow-hidden relative border-primary/20 flex flex-col">
-                        {/* Cameroon National Header */}
-                        <div className="bg-primary p-2 flex items-center justify-between text-white text-[7px] font-black uppercase tracking-tighter shrink-0 border-b border-white/10">
-                          <div className="text-left leading-none space-y-0.5">
-                            <p>Republic of Cameroon</p>
-                            <p>Peace - Work - Fatherland</p>
-                          </div>
-                          <div className="flex gap-1 h-3">
-                            <div className="w-2 h-full bg-[#007a5e]" />
-                            <div className="w-2 h-full bg-[#ce1126] flex items-center justify-center"><div className="w-0.5 h-0.5 bg-yellow-400 rounded-full" /></div>
-                            <div className="w-2 h-full bg-[#fcd116]" />
-                          </div>
-                          <div className="text-right leading-none space-y-0.5">
-                            <p>République du Cameroun</p>
-                            <p>Paix - Travail - Patrie</p>
-                          </div>
-                        </div>
-
-                        {/* Ministry & School Header */}
-                        <div className="p-3 border-b border-accent flex items-center gap-3 bg-accent/5 shrink-0">
-                          <div className="w-12 h-12 bg-white rounded-lg p-1 border shadow-sm flex items-center justify-center shrink-0 overflow-hidden">
-                            {user?.school?.logo ? <img src={user.school.logo} alt="School Logo" className="w-full h-full object-contain" /> : null}
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-[8px] font-black uppercase text-muted-foreground leading-none mb-0.5">Ministry of Secondary Education</p>
-                            <h3 className="text-xs font-black uppercase text-primary leading-tight">
-                              {user?.school?.name || "GOVERNMENT BILINGUAL HIGH SCHOOL DEIDO"}
-                            </h3>
-                            <p className="text-[7px] font-bold text-muted-foreground italic">"{user?.school?.motto || "Discipline - Work - Success"}"</p>
-                          </div>
-                        </div>
-
-                        <div className="flex-1 p-4 flex gap-6 relative">
-                          <div className="w-28 h-28 rounded-xl border-2 border-primary/10 overflow-hidden shadow-lg shrink-0 bg-accent/5">
-                            {s.avatar ? <img src={s.avatar} alt={s.name} className="w-full h-full object-cover" /> : null}
-                          </div>
-                          <div className="flex-1 flex flex-col justify-center gap-3">
-                            <div className="space-y-0.5">
-                              <p className="text-[7px] uppercase font-black text-muted-foreground tracking-widest">Full Name / Nom Complet</p>
-                              <p className="text-sm font-black text-primary uppercase leading-tight">{s.name}</p>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-0.5">
-                                <p className="text-[7px] uppercase font-black text-muted-foreground tracking-widest">Matricule</p>
-                                <p className="text-sm font-mono font-black text-secondary">{(s as any).matricule || s.id}</p>
-                              </div>
-                              <div className="space-y-0.5">
-                                <p className="text-[7px] uppercase font-black text-muted-foreground tracking-widest">Class / Classe</p>
-                                <p className="text-xs font-black text-primary">{s.class}</p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="bg-primary/5 p-2 flex justify-between items-center border-t border-accent shrink-0">
-                          <div className="px-3 py-1 bg-primary text-white rounded-md text-[9px] font-black tracking-widest">
-                            STUDENT ID CARD
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-[8px] font-black text-muted-foreground uppercase">Admission Year</span>
-                            <Badge className="bg-secondary text-primary border-none text-[9px] font-black h-5">{s.admissionYear || "Pending"}</Badge>
-                          </div>
-                        </div>
-                      </Card>
-                      <p className="text-center text-[10px] font-black uppercase text-muted-foreground mt-2 no-print tracking-[0.2em]">Front / Recto</p>
-                    </div>
-
-                    {/* BACK SIDE */}
-                    <div className="relative card-container">
-                      <Card className="w-[450px] h-[280px] border shadow-xl bg-white overflow-hidden relative border-primary/20 flex flex-col">
-                        <div className="bg-primary h-1 w-full shrink-0" />
-                        
-                        <div className="flex-1 p-6 flex flex-col gap-6">
-                          <div className="grid grid-cols-2 gap-8">
-                            <div className="space-y-4">
-                              <div className="space-y-1">
-                                <p className="text-[7px] uppercase font-black text-muted-foreground tracking-widest">Guardian / Tuteur</p>
-                                <p className="text-[10px] font-bold text-primary">{s.guardian}</p>
-                                <p className="text-[10px] font-black text-secondary flex items-center gap-1"><Phone className="w-2.5 h-2.5" /> {s.guardianPhone}</p>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[7px] uppercase font-black text-muted-foreground tracking-widest">Date of Birth / Né(e) le</p>
-                                <p className="text-[10px] font-bold text-primary">{s.dob}</p>
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1">
-                                  <p className="text-[7px] uppercase font-black text-muted-foreground tracking-widest">Gender</p>
-                                  <p className="text-[10px] font-bold text-primary capitalize">{s.gender || "-"}</p>
-                                </div>
-                                <div className="space-y-1">
-                                  <p className="text-[7px] uppercase font-black text-muted-foreground tracking-widest">Admission</p>
-                                  <p className="text-[10px] font-bold text-primary">{s.admissionDate || "-"}</p>
-                                </div>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-[7px] uppercase font-black text-muted-foreground tracking-widest">Residential Address / Adresse</p>
-                                <p className="text-[9px] font-medium text-muted-foreground leading-tight">{s.address}</p>
-                              </div>
-                            </div>
-                            
-                            <div className="flex flex-col items-center justify-center gap-4 text-center border-l border-accent pl-8">
-                              <div className="p-2 bg-white border-2 border-accent rounded-xl shadow-inner">
-                                {s.qrCode ? (
-                                  <img src={s.qrCode} alt={`Verification QR for ${s.name}`} className="w-20 h-20 object-contain" />
-                                ) : (
-                                  <QrCode className="w-20 h-20 text-primary" />
-                                )}
-                              </div>
-                              <p className="text-[7px] font-black text-muted-foreground uppercase leading-tight tracking-widest">
-                                Scannez pour vérifier l'authenticité<br/>Scan to verify authenticity
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="mt-auto flex justify-between items-end border-t border-accent/50 pt-4">
-                            <div className="space-y-4">
-                              <div className="text-[8px] max-w-[200px] leading-relaxed text-muted-foreground font-medium">
-                                <p className="font-black text-[7px] uppercase text-primary mb-1">Notice / Avertissement</p>
-                                This card is strictly personal. If found, please return to the school administration.
-                              </div>
-                            </div>
-                            <div className="text-center space-y-1 relative">
-                              <div className="h-px bg-primary/20 w-24 mx-auto mb-1" />
-                              <p className="text-[8px] font-black text-primary uppercase">The Principal</p>
-                              <Badge variant="outline" className="text-[7px] border-primary/20 text-primary font-black uppercase">Official Seal</Badge>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* PLATFORM BRANDING FOOTER */}
-                        <div className="bg-accent/20 p-2 px-4 flex items-center justify-between shrink-0">
-                          <div className="flex items-center gap-2">
-                            <img src={platformLogo} alt="EduIgnite logo" className="w-4 h-4 object-contain rounded-sm" />
-                            <p className="text-[7px] font-black text-primary uppercase tracking-widest">
-                              Powered by {platformSettings.name} SaaS
-                            </p>
-                          </div>
-                          <span className="text-[6px] text-muted-foreground font-bold italic">Secure Node Registry</span>
-                        </div>
-                      </Card>
-                      <p className="text-center text-[10px] font-black uppercase text-muted-foreground mt-2 no-print tracking-[0.2em]">Back / Verso</p>
-                    </div>
-
-                  </div>
+                  <StudentIdCard
+                    key={s.id}
+                    student={{
+                      name: s.name,
+                      matricule: (s as any).matricule || s.id,
+                      className: s.class,
+                      section: s.section,
+                      dob: s.dob,
+                      placeOfBirth: (s as any).placeOfBirth,
+                      gender: s.gender,
+                      admissionNumber: (s as any).admissionNumber,
+                      avatar: s.avatar,
+                      qrCode: s.qrCode,
+                      guardian: s.guardian,
+                      guardianPhone: s.guardianPhone,
+                    }}
+                    school={{
+                      name: user?.school?.name || "School Name",
+                      motto: user?.school?.motto,
+                      logo: user?.school?.logo,
+                      address: schoolInfo?.address || schoolInfo?.location,
+                      phone: schoolInfo?.phone,
+                      principal: user?.school?.principal,
+                    }}
+                    platform={{ name: platformSettings.name, logo: platformLogo }}
+                  />
                 );
               })}
             </div>

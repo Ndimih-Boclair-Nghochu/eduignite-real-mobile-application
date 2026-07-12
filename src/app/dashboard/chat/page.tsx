@@ -19,6 +19,7 @@ import {
   AlertCircle,
   ArrowLeft,
   Check,
+  CheckCheck,
   CheckCircle2,
   Clock3,
   FileText,
@@ -43,6 +44,7 @@ import { useToast } from "@/hooks/use-toast";
 import { chatService } from "@/lib/api/services/chat.service";
 import { BASE_URL, getAccessToken } from "@/lib/api/client";
 import { resolveMediaUrl } from "@/lib/media";
+import { ChatAttachment } from "@/components/chat-attachment";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { RelatedChatUser, TeacherGroupClassOption } from "@/lib/api/types";
 
@@ -511,6 +513,18 @@ export default function ChatPage() {
     });
   }, [conversations, listFilter, listSearch, user?.id, roleById]);
 
+  // A sent message is "seen" once another participant's last_read_at passes
+  // its timestamp (WhatsApp-style double blue tick).
+  const otherLastReadAt = useMemo(() => {
+    const times = ((selectedConv?.participants) || [])
+      .filter((p: any) => String(getParticipantId(p)) !== String(user?.id))
+      .map((p: any) => (p.last_read_at ? new Date(p.last_read_at).getTime() : 0));
+    return times.length ? Math.max(...times) : 0;
+  }, [selectedConv, user?.id]);
+  const messageSeen = (message: any) =>
+    !message._pending && otherLastReadAt > 0 &&
+    new Date(message.created_at || 0).getTime() <= otherLastReadAt;
+
   const currentConversationDisplay = selectedConv ? getConversationDisplay(selectedConv, user?.id) : null;
   const selectedClassOption = teacherGroupOptions.find((item) => item.id === groupForm.schoolClass);
   const groupCandidateUsers = filteredUsers.filter((record) => record.role !== "STUDENT");
@@ -598,7 +612,9 @@ export default function ChatPage() {
                         <Loader2 className="h-3 w-3 animate-spin text-primary" />
                       </span>
                     ) : (
-                      <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
+                      {record.is_online ? (
+                        <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
+                      ) : null}
                     )}
                   </span>
                   <span className="w-full truncate text-center text-[11.5px] font-bold leading-tight text-foreground">
@@ -791,7 +807,7 @@ export default function ChatPage() {
                         : "");
                 const isImage = message.message_type === "image" && attachmentUrl;
                 const isFile = message.message_type === "file" && (attachmentUrl || message._localFileName);
-                const captionIsAuto = /^(ðŸ“· Photo|ðŸ“„ )/.test(message.text || "");
+                const captionIsAuto = (((message.text || "").codePointAt(0)) || 0) > 0xffff;
 
                 return (
                   <div key={message.id}>
@@ -812,49 +828,25 @@ export default function ChatPage() {
                         )}
                       >
                         {showSender && (
-                          <p className={cn("mb-0.5 text-[12px] font-black leading-none", senderColor(senderId))}>
+                          <p className={cn("mb-0.5 flex items-center gap-1.5 text-[12px] font-black leading-none", senderColor(senderId))}>
                             {senderName}
+                            {String(message.sender_role) === "TEACHER" && (
+                              <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-primary">
+                                Teacher
+                              </span>
+                            )}
                           </p>
                         )}
 
-                        {isImage ? (
-                          <a href={attachmentUrl} target="_blank" rel="noopener noreferrer" className="block" onClick={(e) => { e.preventDefault(); window.open(attachmentUrl, "_blank"); }}>
-                            <img
-                              src={attachmentUrl}
-                              alt="Photo"
-                              className="mb-1 max-h-64 w-full rounded-xl object-cover"
-                              loading="lazy"
-                            />
-                          </a>
-                        ) : null}
-
-                        {isFile ? (
-                          <a
-                            href={attachmentUrl || undefined}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={cn(
-                              "mb-1 flex items-center gap-2.5 rounded-xl p-2.5",
-                              isOwn ? "bg-white/15" : "bg-accent/40"
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "flex h-9 w-9 shrink-0 items-center justify-center rounded-full",
-                                isOwn ? "bg-white/20" : "bg-primary/10"
-                              )}
-                            >
-                              <FileText className={cn("h-5 w-5", isOwn ? "text-white" : "text-primary")} />
-                            </span>
-                            <span className="min-w-0">
-                              <span className="block truncate text-[13px] font-bold">
-                                {message._localFileName || message.attachment_name || (attachmentUrl ? attachmentName(attachmentUrl) : "Document")}
-                              </span>
-                              <span className={cn("text-[11px]", isOwn ? "text-white/70" : "text-muted-foreground")}>
-                                Document
-                              </span>
-                            </span>
-                          </a>
+                        {(isImage || isFile) ? (
+                          <ChatAttachment
+                            messageId={String(message.id)}
+                            isImage={Boolean(isImage)}
+                            isOwn={isOwn}
+                            localPreview={message._localPreview}
+                            localFileName={message._localFileName}
+                            remoteName={message.attachment_name}
+                          />
                         ) : null}
 
                         {message.text && !((isImage || isFile) && captionIsAuto) ? (
@@ -871,7 +863,7 @@ export default function ChatPage() {
                         >
                           {timeOfDay(message.created_at)}
                           {isOwn &&
-                            (message._pending ? <Clock3 className="h-3 w-3" /> : <Check className="h-3 w-3" />)}
+                            (message._pending ? <Clock3 className="h-3 w-3" /> : messageSeen(message) ? <CheckCheck className="h-3.5 w-3.5 text-sky-300" /> : <Check className="h-3 w-3" />)}
                         </span>
                       </div>
                     </div>

@@ -611,11 +611,9 @@ export default function ChatPage() {
                       <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-white shadow">
                         <Loader2 className="h-3 w-3 animate-spin text-primary" />
                       </span>
-                    ) : (
-                      {record.is_online ? (
-                        <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
-                      ) : null}
-                    )}
+                    ) : record.is_online ? (
+                      <span className="absolute bottom-0 right-0 block h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
+                    ) : null}
                   </span>
                   <span className="w-full truncate text-center text-[11.5px] font-bold leading-tight text-foreground">
                     {(record.name || "").split(" ").slice(0, 2).join(" ")}

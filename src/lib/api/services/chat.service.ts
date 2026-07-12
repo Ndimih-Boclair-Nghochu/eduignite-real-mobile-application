@@ -122,6 +122,26 @@ export const chatService = {
     await apiClient.post(API.CHAT.REMOVE_PARTICIPANT(conversationId), { user_id: userId });
   },
 
+  async setParticipantRole(conversationId: string, userId: string, role: 'admin' | 'member'): Promise<any> {
+    const { data } = await apiClient.post(API.CHAT.SET_ROLE(conversationId), { user_id: userId, role });
+    return data;
+  },
+
+  async setTyping(conversationId: string, isTyping: boolean): Promise<{ typing: { user_id: string; user_name: string }[] }> {
+    const { data } = await apiClient.post(API.CHAT.TYPING(conversationId), { is_typing: isTyping });
+    return data;
+  },
+
+  async getTyping(conversationId: string): Promise<{ typing: { user_id: string; user_name: string }[] }> {
+    const { data } = await apiClient.get(API.CHAT.TYPING(conversationId));
+    return data;
+  },
+
+  async reactToMessage(messageId: string, emoji: string): Promise<Message> {
+    const { data } = await apiClient.post(API.CHAT.REACT(messageId), { emoji });
+    return data;
+  },
+
   async deleteMessage(messageId: string): Promise<void> {
     await apiClient.delete(API.CHAT.DELETE_MESSAGE(messageId));
   },

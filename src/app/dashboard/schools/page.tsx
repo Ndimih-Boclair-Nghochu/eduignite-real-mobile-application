@@ -294,6 +294,34 @@ export default function SchoolsManagementPage() {
     setDeleteConfirmation({ matricule: "", password: "", deletion_reason: "" });
   };
 
+  const canPermanentlyDelete = ["CEO", "CTO", "SUPER_ADMIN"].includes(user?.role || "");
+  const [isPurging, setIsPurging] = useState(false);
+  const handlePermanentDelete = async () => {
+    if (!schoolPendingDelete) return;
+    if (!deleteConfirmation.matricule.trim() || !deleteConfirmation.password) {
+      toast({ variant: "destructive", title: "Confirmation Required", description: "Enter your matricule and password to permanently delete." });
+      return;
+    }
+    if (!window.confirm(`This will PERMANENTLY erase "${schoolPendingDelete.name}" and ALL its data. This cannot be undone. Continue?`)) return;
+    setIsPurging(true);
+    try {
+      await schoolsService.permanentDeleteSchool(schoolPendingDelete.id, {
+        matricule: deleteConfirmation.matricule,
+        password: deleteConfirmation.password,
+      });
+      toast({ title: "School permanently deleted", description: `${schoolPendingDelete.name} and all its data were erased.` });
+      setSchoolPendingDelete(null);
+      setManagedSchool(null);
+      setDeleteConfirmation({ matricule: "", password: "", deletion_reason: "" });
+      queryClient.invalidateQueries({ queryKey: ["schools"] });
+      queryClient.invalidateQueries({ queryKey: ["school-stats"] });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Delete Failed", description: getApiErrorMessage(error, "Could not permanently delete this school.") });
+    } finally {
+      setIsPurging(false);
+    }
+  };
+
   const handleConfirmSchoolDelete = async () => {
     if (!schoolPendingDelete) return;
     if (!deleteConfirmation.matricule.trim() || !deleteConfirmation.password) {
@@ -756,6 +784,23 @@ export default function SchoolsManagementPage() {
               <p className="text-xs text-muted-foreground">This reason will appear in the notification email sent to affected school users and in the Draft registry.</p>
             </div>
           </div>
+          {canPermanentlyDelete ? (
+            <div className="mt-2 rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
+              <p className="text-[11px] font-black uppercase tracking-widest text-destructive">Founder-only: Permanent deletion</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Irreversibly erases {schoolPendingDelete?.name} and <span className="font-bold">every user, class, grade, payment and record</span> from the database. This cannot be undone or recovered. Requires your matricule and password above.
+              </p>
+              <Button
+                variant="destructive"
+                className="mt-3 w-full font-black uppercase tracking-widest text-[10px]"
+                onClick={handlePermanentDelete}
+                disabled={isPurging}
+              >
+                {isPurging ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                Delete completely (erase all data)
+              </Button>
+            </div>
+          ) : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setSchoolPendingDelete(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleConfirmSchoolDelete} disabled={deleteSchoolMutation.isPending}>

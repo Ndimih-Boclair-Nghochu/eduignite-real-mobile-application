@@ -44,11 +44,13 @@ import {
   ArrowRight,
   ListChecks,
   ArrowLeft,
-  Save
+  Save,
+  Sparkles
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { studentsService } from "@/lib/api/services/students.service";
+import { aiService } from "@/lib/api/services/ai.service";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -78,6 +80,7 @@ export default function AssignmentsPage() {
   
   const [isCreating, setIsCreating] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isDrafting, setIsDrafting] = useState(false);
   const [viewingResponse, setViewingResponse] = useState<any>(null);
   const [gradingAssignment, setGradingAssignment] = useState<any>(null);
   const [reviewingSubmission, setReviewingSubmission] = useState<any>(null);
@@ -121,10 +124,17 @@ export default function AssignmentsPage() {
   }, [subjectsApiData?.results, user?.id, user?.role, user?.uid]);
 
   const availableClasses = useMemo(() => {
-    const subjectClasses = subjectOptions.flatMap((subject) => subject.classes);
+    const subjectClasses = subjectOptions.flatMap((subject) => subject.classes).filter(Boolean);
+    // A teacher only sees the classes tied to the subjects they teach — not
+    // every class in the school. Fall back to the union only if we could not
+    // derive any class from their subjects.
+    if (user?.role === "TEACHER") {
+      const own = Array.from(new Set(subjectClasses));
+      if (own.length) return own;
+    }
     const schoolClasses = schoolSettings?.class_levels || [];
     return Array.from(new Set([...subjectClasses, ...schoolClasses].filter(Boolean)));
-  }, [schoolSettings?.class_levels, subjectOptions]);
+  }, [schoolSettings?.class_levels, subjectOptions, user?.role]);
 
   const selectedSubjectOption = useMemo(
     () => subjectOptions.find((subject) => subject.id === newAssignment.subjectId),
@@ -222,6 +232,36 @@ export default function AssignmentsPage() {
       cancelled = true;
     };
   }, [gradingAssignment?.targetClass]);
+
+  const handleAiDraft = async () => {
+    if (!newAssignment.title.trim()) {
+      toast({ variant: "destructive", title: "Add a topic first", description: "Enter an assignment title/topic so the AI knows what to draft." });
+      return;
+    }
+    setIsDrafting(true);
+    try {
+      const subjectName = selectedSubjectOption?.name || "the subject";
+      const targetClass = newAssignment.targetClass || "the class";
+      const prompt = `You are an experienced teacher. Draft a clear, well-structured assignment brief for the topic "${newAssignment.title}" in ${subjectName} for ${targetClass}. `
+        + `Include: a short introduction, 3-6 numbered questions or tasks of increasing difficulty, and a brief note on what a good submission should contain. `
+        + `Keep it concise, plain text (no markdown symbols), and ready to hand to students.`;
+      const { reply } = await aiService.directChat(prompt);
+      const text = (reply || "").trim();
+      if (!text) {
+        toast({ variant: "destructive", title: "No draft returned", description: "The assistant did not return any content. Try again." });
+        return;
+      }
+      setNewAssignment((prev) => ({
+        ...prev,
+        instructions: prev.instructions.trim() ? `${prev.instructions.trim()}\n\n${text}` : text,
+      }));
+      toast({ title: "AI draft ready", description: "Review and edit the generated brief, then publish or save it." });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "AI draft failed", description: getApiErrorMessage(error, "Could not generate a draft right now.") });
+    } finally {
+      setIsDrafting(false);
+    }
+  };
 
   const handleCreateAssignment = async (status: 'draft' | 'published') => {
     if (!newAssignment.title || !newAssignment.subjectId || !newAssignment.targetClass || !newAssignment.dueDate || !newAssignment.dueTime) {
@@ -669,8 +709,21 @@ export default function AssignmentsPage() {
                 <Input type="number" value={newAssignment.maxMarks} onChange={(e) => setNewAssignment({...newAssignment, maxMarks: parseInt(e.target.value)})} className="h-12 bg-accent/30 border-none rounded-xl font-black text-primary" />
               </div>
               <div className="md:col-span-2 space-y-2">
-                <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Instructions</Label>
-                <Textarea value={newAssignment.instructions} onChange={(e) => setNewAssignment({...newAssignment, instructions: e.target.value})} placeholder="Guidelines for students..." className="min-h-[120px] bg-accent/30 border-none rounded-xl" />
+                <div className="flex items-center justify-between ml-1">
+                  <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">Instructions</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleAiDraft}
+                    disabled={isDrafting}
+                    className="h-8 gap-1.5 rounded-full bg-secondary/10 px-3 text-[10px] font-black uppercase tracking-widest text-secondary hover:bg-secondary/20"
+                  >
+                    {isDrafting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    {isDrafting ? "Drafting…" : "Draft with AI"}
+                  </Button>
+                </div>
+                <Textarea value={newAssignment.instructions} onChange={(e) => setNewAssignment({...newAssignment, instructions: e.target.value})} placeholder="Guidelines for students… or tap ‘Draft with AI’ to generate a brief from the title." className="min-h-[120px] bg-accent/30 border-none rounded-xl" />
               </div>
               <div className="md:col-span-2 space-y-2">
                 <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Assignment PDF (optional)</Label>

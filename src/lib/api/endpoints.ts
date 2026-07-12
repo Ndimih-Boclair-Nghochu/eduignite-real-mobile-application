@@ -304,8 +304,11 @@ export const API = {
     SETTINGS: (convId: string) => `/chat/conversations/${convId}/settings/`,
     REMOVE_PARTICIPANT: (convId: string) => `/chat/conversations/${convId}/remove-participant/`,
     ADD_PARTICIPANT: (convId: string) => `/chat/conversations/${convId}/add-participant/`,
+    SET_ROLE: (convId: string) => `/chat/conversations/${convId}/set-role/`,
+    TYPING: (convId: string) => `/chat/conversations/${convId}/typing/`,
     MARK_READ: (convId: string) => `/chat/conversations/${convId}/mark-read/`,
     DELETE_MESSAGE: (msgId: string) => `/chat/messages/${msgId}/`,
+    REACT: (msgId: string) => `/chat/messages/${msgId}/react/`,
   },
   AI: {
     REQUESTS: '/ai/requests/',

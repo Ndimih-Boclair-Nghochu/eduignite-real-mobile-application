@@ -109,6 +109,11 @@ export const schoolsService = {
     return normalizeSchool(data) as School;
   },
 
+  // CEO/CTO only: irreversibly erase a school and all of its data.
+  async permanentDeleteSchool(id: string, confirmation: { matricule: string; password: string }): Promise<void> {
+    await apiClient.post(`/schools/schools/${id}/permanent-delete/`, confirmation);
+  },
+
   async toggleSchoolStatus(id: string, body?: Record<string, unknown>): Promise<School> {
     const { data } = await apiClient.post(API.SCHOOLS.TOGGLE_STATUS(id), body ?? {});
     return normalizeSchool(data) as School;

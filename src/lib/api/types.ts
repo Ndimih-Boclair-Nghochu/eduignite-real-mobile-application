@@ -1565,6 +1565,13 @@ export interface Conversation {
   recent_messages?: Message[];
 }
 
+export interface MessageReaction {
+  emoji: string;
+  count: number;
+  user_ids: string[];
+  reacted: boolean;
+}
+
 export interface Message {
   id: string;
   conversation: string;
@@ -1576,6 +1583,7 @@ export interface Message {
   reply_to?: string;
   created_at: string;
   is_deleted: boolean;
+  reactions?: MessageReaction[];
 }
 
 export interface GetOrCreateDirectRequest {

@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { useStudents } from "@/lib/hooks/useStudents";
 import { StudentIdCard } from "@/components/student-id-card";
+import { isNativeApp, saveToEduignite } from "@/lib/native-download";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -150,10 +151,35 @@ export default function IdCardsPage() {
       toast({ variant: "destructive", title: "No Students Selected", description: "Please select at least one student to generate IDs." });
       return;
     }
-    // Save-as-PDF uses the exact on-screen card via the system print dialog, so
-    // the downloaded file is pixel-identical to the preview on every platform.
-    toast({ title: "Preparing PDF", description: "Choose “Save as PDF” in the dialog that opens." });
-    setTimeout(() => window.print(), 250);
+    // Web/desktop: the system print dialog gives a pixel-perfect Save as PDF.
+    if (!isNativeApp()) {
+      toast({ title: "Preparing PDF", description: "Choose “Save as PDF” in the dialog that opens." });
+      setTimeout(() => window.print(), 250);
+      return;
+    }
+    // Mobile app: the print dialog isn't available in the WebView, so rasterize
+    // each rendered card side and save the images to the eduignite folder.
+    setIsGeneratingPdf(true);
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const sides = Array.from(document.querySelectorAll<HTMLElement>("[data-idcard-side]"));
+      if (sides.length === 0) throw new Error("Open the ID card preview before downloading.");
+      let saved = 0;
+      for (const el of sides) {
+        const side = el.getAttribute("data-idcard-side") || "card";
+        const rawName = el.getAttribute("data-idcard-name") || "student";
+        const name = rawName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "student";
+        const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false });
+        const dataUrl = canvas.toDataURL("image/png");
+        await saveToEduignite({ fileName: `id-card-${name}-${side}.png`, url: dataUrl, mimeType: "image/png" });
+        saved += 1;
+      }
+      toast({ title: "ID cards saved", description: `${saved} image(s) saved to your Documents/eduignite folder.` });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Download failed", description: err?.message || "Could not save the ID cards to your device." });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   const handlePrint = () => {

@@ -119,7 +119,7 @@ export function StudentIdCard({
     <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-start print:block print:gap-0">
       {/* ============================= FRONT ============================= */}
       <div className="flex flex-col items-center print:break-after-page print:[zoom:0.78]">
-        <div className="relative h-[284px] w-[450px] overflow-hidden rounded-2xl border border-slate-300 bg-white font-sans shadow-xl print:shadow-none">
+        <div data-idcard-side="front" data-idcard-name={student.name} className="relative h-[284px] w-[450px] overflow-hidden rounded-2xl border border-slate-300 bg-white font-sans shadow-xl print:shadow-none">
           {/* National header */}
           <div className="px-3 py-1.5 text-center text-white" style={{ background: NATIONAL.navy }}>
             <div className="flex items-center justify-center gap-2">
@@ -219,7 +219,7 @@ export function StudentIdCard({
 
       {/* ============================= BACK ============================= */}
       <div className="flex flex-col items-center print:break-after-page print:[zoom:0.78]">
-        <div className="relative flex h-[284px] w-[450px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white font-sans shadow-xl print:shadow-none">
+        <div data-idcard-side="back" data-idcard-name={student.name} className="relative flex h-[284px] w-[450px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white font-sans shadow-xl print:shadow-none">
           <div className="h-1.5 w-full" style={{ background: NATIONAL.navy }} />
 
           <div className="flex gap-3 px-4 pt-3">

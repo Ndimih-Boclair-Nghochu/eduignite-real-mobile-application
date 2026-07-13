@@ -47,15 +47,56 @@ export function cacheKey(config: AxiosRequestConfig): string {
   return `${(config.method || 'get').toLowerCase()}:${base}${url}?${params}`;
 }
 
+// Keep the offline cache lean and fresh: don't serve data older than this, and
+// cap how many responses we retain so IndexedDB never bloats the app.
+const CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+const CACHE_MAX_ENTRIES = 600;
+
 // ---------------------------------------------------------------- read cache
 export async function readCache(config: AxiosRequestConfig): Promise<any | undefined> {
   const s = stores();
   if (!s) return undefined;
   try {
-    const entry = await s.cacheStore.getItem<{ data: any }>(cacheKey(config));
-    return entry?.data;
+    const entry = await s.cacheStore.getItem<{ data: any; at: number }>(cacheKey(config));
+    if (!entry) return undefined;
+    // Never serve very stale offline data.
+    if (entry.at && Date.now() - entry.at > CACHE_MAX_AGE_MS) {
+      await s.cacheStore.removeItem(cacheKey(config));
+      return undefined;
+    }
+    return entry.data;
   } catch {
     return undefined;
+  }
+}
+
+// Evict expired entries and cap the total, so the offline store stays small
+// and quick. Cheap and safe to call periodically.
+export async function pruneCache(): Promise<void> {
+  const s = stores();
+  if (!s) return;
+  try {
+    const entries: { key: string; at: number }[] = [];
+    await s.cacheStore.iterate<{ data: any; at: number }, void>((value, key) => {
+      entries.push({ key, at: value?.at || 0 });
+    });
+    const now = Date.now();
+    const fresh: { key: string; at: number }[] = [];
+    for (const e of entries) {
+      if (now - e.at > CACHE_MAX_AGE_MS) {
+        await s.cacheStore.removeItem(e.key);
+      } else {
+        fresh.push(e);
+      }
+    }
+    if (fresh.length > CACHE_MAX_ENTRIES) {
+      fresh.sort((a, b) => a.at - b.at); // oldest first
+      for (const e of fresh.slice(0, fresh.length - CACHE_MAX_ENTRIES)) {
+        await s.cacheStore.removeItem(e.key);
+      }
+    }
+  } catch {
+    /* ignore */
   }
 }
 
@@ -164,4 +205,7 @@ export function initOfflineSync(client: AxiosInstance): void {
   window.setInterval(trigger, 30000);
   // Attempt once on startup.
   setTimeout(trigger, 2000);
+  // Keep the offline cache lean: prune on startup and hourly.
+  setTimeout(() => { void pruneCache(); }, 5000);
+  window.setInterval(() => { void pruneCache(); }, 60 * 60 * 1000);
 }

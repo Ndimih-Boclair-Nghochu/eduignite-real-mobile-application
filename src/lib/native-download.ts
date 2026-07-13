@@ -77,6 +77,34 @@ async function resolveBase64(source: {
  * Save a file into the device's Documents/eduignite folder.
  * Returns the platform file URI on success.
  */
+// Map a content type to the file extension it should be saved with, so a PDF
+// is saved as a .pdf document (openable in a PDF viewer) rather than a raw or
+// image file.
+const MIME_TO_EXT: Record<string, string> = {
+  "application/pdf": "pdf",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/vnd.ms-excel": "xls",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "text/plain": "txt",
+  "text/csv": "csv",
+  "application/zip": "zip",
+};
+
+function withCorrectExtension(name: string, mime?: string): string {
+  const ext = MIME_TO_EXT[(mime || "").split(";")[0].trim().toLowerCase()];
+  if (!ext) return name;
+  if (new RegExp(`\\.${ext}$`, "i").test(name)) return name; // already correct
+  // Replace a wrong/mismatched extension, or append if there is none.
+  if (/\.[a-z0-9]{1,5}$/i.test(name)) return name.replace(/\.[a-z0-9]{1,5}$/i, `.${ext}`);
+  return `${name}.${ext}`;
+}
+
 export async function saveToEduignite(opts: {
   fileName: string;
   url?: string;
@@ -84,7 +112,7 @@ export async function saveToEduignite(opts: {
   mimeType?: string;
 }): Promise<string> {
   const { Filesystem, Directory } = await import("@capacitor/filesystem");
-  const { base64 } = await resolveBase64(opts);
+  const { base64, mime } = await resolveBase64(opts);
   if (!base64) throw new Error("There was no file data to save.");
 
   // On older Android the public Documents folder needs a storage grant. Ask for
@@ -98,7 +126,8 @@ export async function saveToEduignite(opts: {
     /* permission API not available on this platform — continue */
   }
 
-  const path = `${EDUIGNITE_FOLDER}/${sanitizeFileName(opts.fileName)}`;
+  const finalName = withCorrectExtension(sanitizeFileName(opts.fileName), opts.mimeType || mime);
+  const path = `${EDUIGNITE_FOLDER}/${finalName}`;
   const result = await Filesystem.writeFile({
     path,
     data: base64,

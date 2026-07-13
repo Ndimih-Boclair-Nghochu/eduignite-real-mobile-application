@@ -157,26 +157,40 @@ export default function IdCardsPage() {
       setTimeout(() => window.print(), 250);
       return;
     }
-    // Mobile app: the print dialog isn't available in the WebView, so rasterize
-    // each rendered card side and save the images to the eduignite folder.
+    // Mobile app: the print dialog isn't available in the WebView, so capture
+    // each rendered card side and assemble a real multi-page PDF document
+    // (front = page 1, back = page 2, per student), then save it to the folder.
     setIsGeneratingPdf(true);
     try {
       const html2canvas = (await import("html2canvas")).default;
+      const { default: JsPDF } = await import("jspdf");
       const sides = Array.from(document.querySelectorAll<HTMLElement>("[data-idcard-side]"));
       if (sides.length === 0) throw new Error("Open the ID card preview before downloading.");
-      let saved = 0;
+
+      let pdf: any = null;
       for (const el of sides) {
-        const side = el.getAttribute("data-idcard-side") || "card";
-        const rawName = el.getAttribute("data-idcard-name") || "student";
-        const name = rawName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "student";
         const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false });
-        const dataUrl = canvas.toDataURL("image/png");
-        await saveToEduignite({ fileName: `id-card-${name}-${side}.png`, url: dataUrl, mimeType: "image/png" });
-        saved += 1;
+        const imgData = canvas.toDataURL("image/png");
+        const w = canvas.width;
+        const h = canvas.height;
+        const orientation = w >= h ? "landscape" : "portrait";
+        if (!pdf) {
+          pdf = new JsPDF({ orientation, unit: "px", format: [w, h] });
+        } else {
+          pdf.addPage([w, h], orientation);
+        }
+        pdf.addImage(imgData, "PNG", 0, 0, w, h);
       }
-      toast({ title: "ID cards saved", description: `${saved} image(s) saved to your Documents/eduignite folder.` });
+
+      const firstName = sides[0].getAttribute("data-idcard-name") || "student";
+      const name = firstName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "student";
+      const cardCount = Math.ceil(sides.length / 2);
+      const fileName = cardCount > 1 ? "id-cards.pdf" : `id-card-${name}.pdf`;
+      const base64 = pdf.output("datauristring").split(",")[1] || "";
+      await saveToEduignite({ fileName, base64, mimeType: "application/pdf" });
+      toast({ title: "ID card saved", description: `Saved as a PDF (${sides.length} page${sides.length > 1 ? "s" : ""}) in your Documents/eduignite folder.` });
     } catch (err: any) {
-      toast({ variant: "destructive", title: "Download failed", description: err?.message || "Could not save the ID cards to your device." });
+      toast({ variant: "destructive", title: "Download failed", description: err?.message || "Could not save the ID card to your device." });
     } finally {
       setIsGeneratingPdf(false);
     }

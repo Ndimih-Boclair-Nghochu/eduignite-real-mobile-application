@@ -18,6 +18,7 @@ import {
   Award,
   Loader2,
   CalendarClock,
+  Layers,
   ShieldCheck,
   History,
   FileText,
@@ -279,6 +280,8 @@ export default function GradeBookPage() {
   const [deadlineDate, setDeadlineDate] = useState("");
   const [savingDeadline, setSavingDeadline] = useState(false);
   const [classes, setClasses] = useState<any[]>([]);
+  const [cycleClasses, setCycleClasses] = useState<any[]>([]);
+  const [savingCycleId, setSavingCycleId] = useState<string | null>(null);
   const [studentTestGrades, setStudentTestGrades] = useState<any[]>([]);
   const [isStudentTestLoading, setIsStudentTestLoading] = useState(false);
   const [reportCard, setReportCard] = useState<any>(null);
@@ -1000,6 +1003,32 @@ export default function GradeBookPage() {
     loadClasses();
   }, [isAdmin, reloadNonce, toast]);
 
+  // Load the real class registry so admins can set each class's cycle.
+  useEffect(() => {
+    if (!isAdmin || !user?.school?.id) return;
+    let alive = true;
+    schoolsService
+      .getHierarchyClasses({ school_id: user.school.id })
+      .then((rows) => alive && setCycleClasses(Array.isArray(rows) ? rows : []))
+      .catch(() => alive && setCycleClasses([]));
+    return () => {
+      alive = false;
+    };
+  }, [isAdmin, user?.school?.id, reloadNonce]);
+
+  const handleSetClassCycle = async (classId: string, cycle: string) => {
+    setSavingCycleId(classId);
+    try {
+      await schoolsService.updateHierarchyClass(classId, { cycle: cycle as any, school_id: user?.school?.id });
+      setCycleClasses((prev) => prev.map((c) => (String(c.id) === String(classId) ? { ...c, cycle } : c)));
+      toast({ title: "Cycle updated", description: `Class set to ${cycle === "second" ? "Second" : "First"} Cycle.` });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Update failed", description: extractApiErrorMessage(error?.response?.data) || "Could not update the cycle." });
+    } finally {
+      setSavingCycleId(null);
+    }
+  };
+
   useEffect(() => {
     const canLoadSequence = adminReportScope === "sequence" && Boolean(selectedSequence);
     const canLoadTerm = adminReportScope === "term" && Boolean(selectedAdminTerm && selectedAdminAcademicYear);
@@ -1714,6 +1743,39 @@ export default function GradeBookPage() {
             </div>
           );
         })()}
+
+        {cycleClasses.length > 0 ? (
+          <Card className="border-none shadow-sm bg-white">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg font-black text-primary flex items-center gap-2">
+                <Layers className="h-5 w-5 text-secondary" />
+                Class Cycles
+              </CardTitle>
+              <CardDescription>
+                Assign each class to the First or Second Cycle. This appears on report cards.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {cycleClasses.map((cls: any) => (
+                <div key={cls.id} className="flex items-center justify-between gap-3 rounded-xl border border-accent/60 bg-accent/10 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-black text-primary">{cls.name}</p>
+                    {cls.sub_school_name ? <p className="truncate text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{cls.sub_school_name}</p> : null}
+                  </div>
+                  <Select value={cls.cycle || "first"} onValueChange={(v) => handleSetClassCycle(String(cls.id), v)} disabled={savingCycleId === String(cls.id)}>
+                    <SelectTrigger className="h-9 w-[130px] rounded-lg bg-white text-xs font-bold shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="first">First Cycle</SelectItem>
+                      <SelectItem value="second">Second Cycle</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ) : null}
 
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

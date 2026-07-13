@@ -28,7 +28,7 @@ export function validateImageFile(file: File, label = "image", allowSvg = false)
 export function getUploadErrorMessage(error: unknown, label = "image") {
   const maybeNetworkError = error as { code?: string; response?: unknown; message?: string };
   if (maybeNetworkError?.code === "ERR_NETWORK" || (!maybeNetworkError?.response && maybeNetworkError?.message?.toLowerCase().includes("network"))) {
-    return `Network error: the ${label} upload did not reach the server. Check that your connection is stable and try again.`;
+    return `You appear to be offline. Please try uploading the ${label} again once your connection is back.`;
   }
 
   return getApiErrorMessage(

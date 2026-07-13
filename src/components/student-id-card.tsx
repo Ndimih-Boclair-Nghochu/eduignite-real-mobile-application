@@ -116,9 +116,9 @@ export function StudentIdCard({
   const termsFr = `Cette carte est strictement personnelle et incessible. Toute perte doit être signalée immédiatement à l'administration de ${schoolName}. En cas de découverte, veuillez la retourner à ${schoolName}.`;
 
   return (
-    <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-start print:flex-row print:gap-4 print:break-inside-avoid">
+    <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-start print:block print:gap-0">
       {/* ============================= FRONT ============================= */}
-      <div className="flex flex-col items-center">
+      <div className="flex flex-col items-center print:break-after-page print:[zoom:0.78]">
         <div className="relative h-[284px] w-[450px] overflow-hidden rounded-2xl border border-slate-300 bg-white font-sans shadow-xl print:shadow-none">
           {/* National header */}
           <div className="px-3 py-1.5 text-center text-white" style={{ background: NATIONAL.navy }}>
@@ -194,9 +194,11 @@ export function StudentIdCard({
               <div className="mt-2 w-full text-center">
                 <div className="mx-auto h-4 border-b border-slate-300" />
                 <p className="mt-0.5 text-[6px] font-black uppercase leading-none tracking-[0.08em] text-slate-500">
-                  Signature du Principal
+                  Signature du Principal / Principal's Signature
                 </p>
-                <p className="truncate text-[7px] font-bold text-[#0b2a5b]">{school.principal || "The Principal"}</p>
+                <p className="truncate text-[8px] font-black text-[#0b2a5b]">
+                  Principal: {school.principal || "—"}
+                </p>
               </div>
             </div>
           </div>
@@ -216,7 +218,7 @@ export function StudentIdCard({
       </div>
 
       {/* ============================= BACK ============================= */}
-      <div className="flex flex-col items-center">
+      <div className="flex flex-col items-center print:break-after-page print:[zoom:0.78]">
         <div className="relative flex h-[284px] w-[450px] flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white font-sans shadow-xl print:shadow-none">
           <div className="h-1.5 w-full" style={{ background: NATIONAL.navy }} />
 
@@ -268,14 +270,11 @@ export function StudentIdCard({
 
           {/* Footer */}
           <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-1">
-            <div className="flex items-center gap-1.5">
-              {platform?.logo ? <img src={platform.logo} alt="" className="h-3.5 w-3.5 rounded-sm object-contain" /> : null}
-              <span className="text-[6px] font-black uppercase tracking-[0.1em] text-slate-500">
-                Powered by {platform?.name || "EduIgnite"}
-              </span>
-            </div>
+            <span className="text-[6px] font-bold uppercase tracking-[0.08em] text-slate-500">
+              Année Académique / Academic Year: {academicYear}
+            </span>
             <span className="text-[6px] font-bold uppercase tracking-[0.08em] text-slate-400">
-              A.Y. {academicYear}
+              Valid until: {formatLongDate(expires)}
             </span>
           </div>
         </div>

@@ -2,7 +2,7 @@ export function getApiErrorMessage(error: any, fallback = "Something went wrong.
   if (!error) return fallback;
 
   if (error.code === "ERR_NETWORK" || !error.response) {
-    return "Network error: unable to reach the server. Check your connection and try again.";
+    return "You appear to be offline. Your changes are saved and will sync automatically once you're back online.";
   }
 
   const status = error.response?.status;
@@ -47,7 +47,7 @@ export function getApiErrorMessage(error: any, fallback = "Something went wrong.
   if (status === 401) return "Authentication failed: wrong matricule or password.";
   if (status === 403) return "You are not allowed to carry out this operation.";
   if (status === 404) return "The requested record does not exist.";
-  if (status >= 500) return "Server error: the backend failed while processing this request.";
+  if (status >= 500) return "We couldn't complete that just now. Please try again in a moment.";
 
   return error.message || fallback;
 }

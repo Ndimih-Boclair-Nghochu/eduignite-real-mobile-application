@@ -125,7 +125,7 @@ const getAcademicCalendarError = (error: any): string => {
   if (status === 403) return "Your account is not allowed to update this school's academic calendar.";
   if (status === 404) return "The school settings record was missing. Refresh the page and try again so EduIgnite can create it automatically.";
   if (status >= 500) return "The server could not save the academic year right now. Please try again after a moment.";
-  if (error?.code === "ERR_NETWORK") return "Network error: EduIgnite could not reach the server, so the academic year was not saved.";
+  if (error?.code === "ERR_NETWORK") return "You appear to be offline. The academic year will be saved automatically once you're back online.";
   return error?.message || "Could not update the academic calendar.";
 };
 

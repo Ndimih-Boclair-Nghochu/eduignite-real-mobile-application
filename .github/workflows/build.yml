@@ -40,6 +40,20 @@ jobs:
       - name: Install Firebase Android config (FCM push)
         run: cp resources/google-services.json android/app/google-services.json
 
+      - name: Add storage permissions to Android manifest
+        run: |
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          # @capacitor/filesystem writes to Documents/eduignite and requires these
+          # permissions to be declared, or it throws at runtime. maxSdkVersion keeps
+          # them scoped to the legacy Android versions that actually need them.
+          if ! grep -q 'WRITE_EXTERNAL_STORAGE' "$MANIFEST"; then
+            sed -i 's#</manifest>#    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />\n</manifest>#' "$MANIFEST"
+          fi
+          # Let writes to the public Documents folder work on Android 10.
+          sed -i 's#<application #<application android:requestLegacyExternalStorage="true" #' "$MANIFEST"
+          echo "----- AndroidManifest.xml -----"
+          cat "$MANIFEST"
+
       - name: Generate app icons (shield logo)
         run: npx @capacitor/assets generate --android --iconBackgroundColor '#1E3A5F' --iconBackgroundColorDark '#1E3A5F' || echo "icon generation skipped"
 

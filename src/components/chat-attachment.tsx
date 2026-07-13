@@ -33,6 +33,7 @@ export function ChatAttachment({
   const [name, setName] = useState<string>(localFileName || remoteName || "Document");
   const [loading, setLoading] = useState<boolean>(!localPreview);
   const [failed, setFailed] = useState(false);
+  const [expired, setExpired] = useState(false);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
@@ -49,15 +50,37 @@ export function ChatAttachment({
       .get(`/chat/messages/${messageId}/attachment-file/`, { params: { as: "json" } })
       .then((res) => {
         if (!alive) return;
+        if (res.data?.expired) {
+          setExpired(true);
+          if (res.data?.name) setName(res.data.name);
+          return;
+        }
         setDataUrl(res.data?.data_url || "");
         if (res.data?.name) setName(res.data.name);
       })
-      .catch(() => alive && setFailed(true))
+      .catch((err: any) => {
+        if (!alive) return;
+        // 410 = the 1-month retention job cleared this file.
+        if (err?.response?.status === 410) setExpired(true);
+        else setFailed(true);
+      })
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
   }, [messageId, localPreview]);
+
+  const ExpiredNotice = (
+    <div className="mb-1 flex w-full items-start gap-2 rounded-xl border border-dashed border-amber-300 bg-amber-50 p-2.5 text-left">
+      <FileText className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+      <span className="min-w-0">
+        <span className="block truncate text-[12px] font-bold text-amber-800">{name}</span>
+        <span className="text-[11px] leading-tight text-amber-700">
+          This file is no longer available. Please ask the sender to resend it.
+        </span>
+      </span>
+    </div>
+  );
 
   const openInNewTab = () => {
     if (!dataUrl) return;
@@ -96,6 +119,8 @@ export function ChatAttachment({
     link.click();
     link.remove();
   };
+
+  if (expired) return ExpiredNotice;
 
   if (isImage) {
     if (loading) {

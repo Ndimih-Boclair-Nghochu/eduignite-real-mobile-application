@@ -87,6 +87,17 @@ export async function saveToEduignite(opts: {
   const { base64 } = await resolveBase64(opts);
   if (!base64) throw new Error("There was no file data to save.");
 
+  // On older Android the public Documents folder needs a storage grant. Ask for
+  // it best-effort; on Android 13+ this is a no-op and always resolves.
+  try {
+    const status = await Filesystem.checkPermissions();
+    if (status.publicStorage !== "granted") {
+      await Filesystem.requestPermissions();
+    }
+  } catch {
+    /* permission API not available on this platform — continue */
+  }
+
   const path = `${EDUIGNITE_FOLDER}/${sanitizeFileName(opts.fileName)}`;
   const result = await Filesystem.writeFile({
     path,

@@ -1,6 +1,23 @@
 "use client";
 
+import { isNativeApp, saveToEduignite } from "@/lib/native-download";
+
 export function downloadBlob(blob: Blob, filename: string) {
+  // On the native mobile app the browser download (link.click) does nothing,
+  // so write the file into the device Documents/eduignite folder instead.
+  if (isNativeApp()) {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = String(reader.result || "").split(",")[1] || "";
+      void saveToEduignite({
+        fileName: filename,
+        base64,
+        mimeType: blob.type || "application/octet-stream",
+      });
+    };
+    reader.readAsDataURL(blob);
+    return;
+  }
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -9,6 +26,21 @@ export function downloadBlob(blob: Blob, filename: string) {
   link.click();
   link.remove();
   window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+}
+
+// Save a generated jsPDF document. On the native app doc.save() is a no-op, so
+// route the PDF into the device eduignite folder.
+function savePdfNativeAware(doc: any, filename: string) {
+  if (isNativeApp()) {
+    try {
+      const base64 = doc.output("datauristring").split(",")[1] || "";
+      void saveToEduignite({ fileName: filename, base64, mimeType: "application/pdf" });
+      return;
+    } catch {
+      /* fall through to browser save */
+    }
+  }
+  doc.save(filename);
 }
 
 function pdfFilename(filename: string) {
@@ -124,7 +156,7 @@ export async function downloadHtmlDocument(html: string, filename: string) {
         backgroundColor: "#ffffff",
       },
       callback: (pdf) => {
-        pdf.save(pdfFilename(filename));
+        savePdfNativeAware(pdf, pdfFilename(filename));
       },
     } as any);
   } catch (error) {
@@ -151,7 +183,7 @@ export async function downloadHtmlDocument(html: string, filename: string) {
           y += 13;
         }
       }
-      doc.save(pdfFilename(filename));
+      savePdfNativeAware(doc, pdfFilename(filename));
     } catch (fallbackError) {
       console.error("PDF fallback failed; exporting a basic PDF fallback.", fallbackError);
       downloadBlob(buildBasicPdfBlob(stripHtmlToLines(html)), pdfFilename(filename));

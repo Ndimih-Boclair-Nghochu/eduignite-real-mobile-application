@@ -2263,24 +2263,41 @@ export default function GradeBookPage() {
                     <Button
                       variant="outline"
                       className="gap-2 rounded-xl border-primary/20 font-bold text-primary"
-                      onClick={() =>
-                        generateBrandedTablePdf({
-                          title: `Marks Sheet — ${selectedTeacherSubject?.subject_name || "Subject"}`,
-                          subtitle: `${selectedTeacherSubject?.class_name || ""} • ${selectedTeacherSequence?.name || ""} (${selectedTeacherSequence?.academic_year || ""})`,
-                          schoolName: user?.school?.name || "EduIgnite",
-                          columns: ["#", "Student", "Matricule", "Admission No.", "Mark /20", "Remark"],
-                          rows: teacherClassStudents.map((s: any) => [
-                            s.index,
-                            s.name,
-                            s.matricule || "—",
-                            s.admission_number || "—",
-                            existingGradeMap[s.id]?.score ?? gradeDrafts[s.id] ?? "—",
-                            existingGradeMap[s.id]?.comment || gradeCommentDrafts[s.id] || "",
-                          ]),
-                          fileName: `marks-${(selectedTeacherSubject?.class_name || "class").replace(/\s+/g, "-").toLowerCase()}`,
-                          footnote: `Total: ${teacherClassStudents.length} student(s)`,
-                        })
-                      }
+                      onClick={() => {
+                        if (!teacherClassStudents || teacherClassStudents.length === 0) {
+                          toast({
+                            variant: "destructive",
+                            title: "Nothing to download",
+                            description: "Select a class, subject and sequence with students loaded before downloading the marks sheet.",
+                          });
+                          return;
+                        }
+                        try {
+                          generateBrandedTablePdf({
+                            title: `Marks Sheet — ${selectedTeacherSubject?.subject_name || "Subject"}`,
+                            subtitle: `${selectedTeacherSubject?.class_name || ""} • ${selectedTeacherSequence?.name || ""} (${selectedTeacherSequence?.academic_year || ""})`,
+                            schoolName: user?.school?.name || "EduIgnite",
+                            columns: ["#", "Student", "Matricule", "Admission No.", "Mark /20", "Remark"],
+                            rows: teacherClassStudents.map((s: any) => [
+                              s.index,
+                              s.name,
+                              s.matricule || "—",
+                              s.admission_number || "—",
+                              existingGradeMap[s.id]?.score ?? gradeDrafts[s.id] ?? "—",
+                              existingGradeMap[s.id]?.comment || gradeCommentDrafts[s.id] || "",
+                            ]),
+                            fileName: `marks-${(selectedTeacherSubject?.class_name || "class").replace(/\s+/g, "-").toLowerCase()}`,
+                            footnote: `Total: ${teacherClassStudents.length} student(s)`,
+                          });
+                          toast({ title: "Marks sheet downloaded", description: "Your marks sheet PDF has been generated." });
+                        } catch (error) {
+                          toast({
+                            variant: "destructive",
+                            title: "Download failed",
+                            description: error instanceof Error ? error.message : "Could not generate the marks sheet PDF.",
+                          });
+                        }
+                      }}
                     >
                       <FileText className="h-4 w-4" /> Download PDF
                     </Button>

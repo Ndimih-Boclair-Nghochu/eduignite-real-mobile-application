@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { apiClient } from "@/lib/api/client";
 import { useToast } from "@/hooks/use-toast";
 import { getApiErrorMessage } from "@/lib/api/errors";
+import { validateImageFile } from "@/lib/upload-validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -111,12 +112,45 @@ export default function SchoolEventsPage() {
 
   const handlePickImage = (file: File | null | undefined) => {
     if (!file) return;
-    if (file.size > 4 * 1024 * 1024) {
-      toast({ variant: "destructive", title: "Image too large", description: "Event pictures are limited to 4 MB." });
+    const fileError = validateImageFile(file, "event picture", false);
+    if (fileError) {
+      toast({ variant: "destructive", title: "Image too large", description: fileError });
+      if (imageInputRef.current) imageInputRef.current.value = "";
       return;
     }
+    // Downscale before turning the picture into a base64 data URL. A full phone
+    // photo produces a huge payload that fails to publish over the native HTTP
+    // layer; a resized JPEG keeps the request small and reliable.
     const reader = new FileReader();
-    reader.onload = () => setForm((prev) => ({ ...prev, image: String(reader.result) }));
+    reader.onload = () => {
+      const dataUrl = String(reader.result);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const maxDim = 1600;
+          let { width, height } = img;
+          if (width > maxDim || height > maxDim) {
+            const scale = maxDim / Math.max(width, height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            setForm((prev) => ({ ...prev, image: dataUrl }));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          setForm((prev) => ({ ...prev, image: canvas.toDataURL("image/jpeg", 0.82) }));
+        } catch {
+          setForm((prev) => ({ ...prev, image: dataUrl }));
+        }
+      };
+      img.onerror = () => setForm((prev) => ({ ...prev, image: dataUrl }));
+      img.src = dataUrl;
+    };
     reader.readAsDataURL(file);
   };
 
@@ -288,7 +322,13 @@ export default function SchoolEventsPage() {
 
             <Button
               className="h-12 w-full rounded-2xl font-black uppercase text-xs"
-              onClick={() => createMutation.mutate()}
+              onClick={() => {
+                if (!form.title.trim()) {
+                  toast({ variant: "destructive", title: "Title required", description: "Add an event title before publishing." });
+                  return;
+                }
+                createMutation.mutate();
+              }}
               disabled={createMutation.isPending || !form.title.trim()}
             >
               {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Publish Event"}

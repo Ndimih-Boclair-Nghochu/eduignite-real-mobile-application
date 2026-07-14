@@ -14,6 +14,8 @@ import { useActiveSequence, useSequences, useSubjects } from "@/lib/hooks/useGra
 import { useStudents } from "@/lib/hooks/useStudents";
 import { useHierarchyClasses, useSchoolSettings } from "@/lib/hooks/useSchools";
 import { useCreateExam, useExams, useMyExamResults } from "@/lib/hooks/useExams";
+import { useQuery } from "@tanstack/react-query";
+import { gradesService } from "@/lib/api/services/grades.service";
 import type { CreateExamRequest, ExamQuestion } from "@/lib/api/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -74,6 +76,21 @@ export default function ExamsPage() {
   const { data: resultsData, isLoading: resultsLoading } = useMyExamResults();
   const createExam = useCreateExam();
 
+  // Teachers pick from the classes and subjects they are actually assigned to.
+  // The hierarchy/global-subject lists are admin-scoped and come back empty for
+  // teachers, which is why the class/subject dropdowns were blank — so load the
+  // teacher's real assignments from their grade sheet instead.
+  const teacherSheetQuery = useQuery({
+    queryKey: ["exam-teacher-sheet", user?.id],
+    queryFn: () => gradesService.getTeacherGradeSheet(),
+    enabled: !!isTeacher,
+    staleTime: 60_000,
+  });
+  const teacherSheetClasses = useMemo(
+    () => (Array.isArray(teacherSheetQuery.data?.classes) ? teacherSheetQuery.data.classes : []),
+    [teacherSheetQuery.data],
+  );
+
   const exams = examsData?.results ?? [];
   const subjects = subjectsData?.results ?? [];
   const sequences = sequencesData?.results ?? [];
@@ -83,17 +100,49 @@ export default function ExamsPage() {
     if (activeSequence?.id && !form.sequence) setForm((prev) => ({ ...prev, sequence: activeSequence.id }));
   }, [activeSequence, form.sequence]);
 
-  const teacherSubjectNames = useMemo(
-    () => !isTeacher ? [] : subjects.filter((s: any) => String(s.teacher) === String(user?.id) || s.teacher_name === user?.name).map((s: any) => s.name),
-    [isTeacher, subjects, user]
-  );
+  // The teacher's assigned subjects, keyed by the real (global) subject id so
+  // the exam create payload stays valid.
+  const teacherSheetSubjects = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    teacherSheetClasses.forEach((schoolClass: any) =>
+      (schoolClass.subjects ?? []).forEach((subject: any) => {
+        const id = subject.subject_id || subject.id;
+        const name = subject.subject_name || subject.name;
+        if (id && name && !map.has(String(id))) map.set(String(id), { id: String(id), name });
+      }),
+    );
+    return Array.from(map.values());
+  }, [teacherSheetClasses]);
+
+  const teacherSubjectNames = useMemo(() => {
+    if (!isTeacher) return [];
+    if (teacherSheetSubjects.length) return teacherSheetSubjects.map((s) => s.name);
+    return subjects
+      .filter((s: any) => String(s.teacher) === String(user?.id) || s.teacher_name === user?.name)
+      .map((s: any) => s.name);
+  }, [isTeacher, teacherSheetSubjects, subjects, user]);
+
   const availableClasses = useMemo(() => {
+    if (isTeacher && teacherSheetClasses.length) {
+      return teacherSheetClasses.map((schoolClass: any) => ({
+        id: schoolClass.id,
+        name: schoolClass.name,
+        sub_school_name: schoolClass.sub_school_name || "Main",
+      }));
+    }
     if (classesQuery.data?.length) return classesQuery.data;
     return (studentsData?.results ?? [])
       .map((student: any) => ({ id: student.school_class_id || student.student_class, name: student.student_class, sub_school_name: student.section || "Main" }))
       .filter((item: any) => Boolean(item.name));
-  }, [classesQuery.data, studentsData]);
-  const filteredSubjects = useMemo(() => isTeacher ? subjects.filter((s: any) => teacherSubjectNames.includes(s.name)) : subjects, [isTeacher, subjects, teacherSubjectNames]);
+  }, [isTeacher, teacherSheetClasses, classesQuery.data, studentsData]);
+
+  const filteredSubjects = useMemo(() => {
+    if (isTeacher) {
+      if (teacherSheetSubjects.length) return teacherSheetSubjects;
+      return subjects.filter((s: any) => teacherSubjectNames.includes(s.name));
+    }
+    return subjects;
+  }, [isTeacher, teacherSheetSubjects, subjects, teacherSubjectNames]);
   const onsiteExams = useMemo(() => exams.filter((e: any) => e.mode === "ONSITE").filter((e: any) => !isTeacher || teacherSubjectNames.includes(e.subject_name)), [exams, isTeacher, teacherSubjectNames]);
   const activeOnlineExams = useMemo(() => exams.filter((e: any) => e.mode === "ONLINE" && e.status === "SCHEDULED" && new Date(e.end_time ?? e.start_time).getTime() > Date.now()), [exams]);
   const timetableRows = useMemo(() => availableClasses.map((schoolClass: any) => ({ className: schoolClass.name, exams: onsiteExams.filter((e: any) => e.target_class === schoolClass.name).slice(0, 5) })), [availableClasses, onsiteExams]);

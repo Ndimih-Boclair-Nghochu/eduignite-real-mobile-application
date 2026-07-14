@@ -50,6 +50,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { usersService } from "@/lib/api/services/users.service";
 import { schoolsService } from "@/lib/api/services/schools.service";
 import { usePagination, DataPagination } from "@/components/ui/data-pagination";
+import { UserModerationControls } from "@/components/dashboard/user-moderation";
 import type { HierarchyClass, HierarchyClassSubject, HierarchySubSchool } from "@/lib/api/types";
 
 const EXECUTIVE_STAFF_CREATION_ROLES = ["SCHOOL_ADMIN", "SUB_ADMIN", "TEACHER", "BURSAR", "LIBRARIAN"];
@@ -883,6 +884,17 @@ export default function StaffPage() {
                       </Button>
                     ) : null}
                   </div>
+                  {isAdmin && staffRegistryMode !== "draft" ? (
+                    <div className="mt-3 border-t pt-3">
+                      <UserModerationControls
+                        user={staff}
+                        onChanged={() => {
+                          queryClient.invalidateQueries({ queryKey: ["users"] });
+                          queryClient.invalidateQueries({ queryKey: ["staff-detail"] });
+                        }}
+                      />
+                    </div>
+                  ) : null}
                 </div>
               </Card>
             ))}

@@ -176,4 +176,18 @@ export const usersService = {
     const { data } = await apiClient.post(API.USERS.RESTORE(id));
     return normalizeUser(data);
   },
+
+  async suspendUser(id: string, payload: { days?: number; reason?: string; suspended_until?: string }): Promise<User> {
+    const { data } = await apiClient.post(API.USERS.SUSPEND(id), payload);
+    return normalizeUser(data);
+  },
+
+  async unsuspendUser(id: string): Promise<User> {
+    const { data } = await apiClient.post(API.USERS.UNSUSPEND(id));
+    return normalizeUser(data);
+  },
+
+  async hardDeleteUser(id: string, confirmation: { matricule: string; password: string }): Promise<void> {
+    await apiClient.post(API.USERS.HARD_DELETE(id), confirmation);
+  },
 };

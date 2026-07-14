@@ -34,6 +34,7 @@ import { BookOpen, ChevronDown, Eye, FileText, KeyRound, Link2, Loader2, Plus, S
 import { apiClient } from "@/lib/api/client";
 import { generateBrandedTablePdf } from "@/lib/pdf-branded";
 import { usePagination, DataPagination } from "@/components/ui/data-pagination";
+import { UserModerationControls } from "@/components/dashboard/user-moderation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type {
   BulkStudentUploadRequest,
@@ -1977,6 +1978,13 @@ export default function StudentsPage() {
                                 <KeyRound className="mr-2 h-4 w-4" />
                                 Password
                               </Button>
+                            ) : null}
+                            {isAdminRole && student.user?.id ? (
+                              <UserModerationControls
+                                user={student.user}
+                                onChanged={() => { void studentsQuery.refetch(); }}
+                                compact
+                              />
                             ) : null}
                           </div>
                         </TableCell>

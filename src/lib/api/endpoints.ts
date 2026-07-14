@@ -27,6 +27,9 @@ export const API = {
     TOGGLE_LICENSE: (id: string) => `/users/${id}/toggle_license/`,
     UPDATE_ROLE: (id: string) => `/users/${id}/update_role/`,
     RESTORE: (id: string) => `/users/${id}/restore/`,
+    SUSPEND: (id: string) => `/users/${id}/suspend/`,
+    UNSUSPEND: (id: string) => `/users/${id}/unsuspend/`,
+    HARD_DELETE: (id: string) => `/users/${id}/hard-delete/`,
   },
   SCHOOLS: {
     BASE: '/schools/schools/',

@@ -59,6 +59,7 @@ import { schoolsService } from "@/lib/api/services/schools.service";
 import { useSchoolSettings } from "@/lib/hooks/useSchools";
 import { downloadHtmlDocument, escapeHtml } from "@/lib/browser-download";
 import { buildCameroonReportCardDocument, buildCameroonReportCardHtml } from "@/lib/cameroon-report-card";
+import { isNativeApp } from "@/lib/native-download";
 
 const ACADEMIC_YEARS = ["2023 / 2024", "2022 / 2023", "2021 / 2022"];
 const TERMS = ["Term 1", "Term 2", "Term 3"];
@@ -1639,7 +1640,18 @@ export default function GradeBookPage() {
                 <div className="space-y-5">
                   <div dangerouslySetInnerHTML={{ __html: buildCameroonReportCardHtml(adminReportCard, { title: "Report Card", school: user?.school }) }} />
                   <DialogFooter className="gap-2 sm:justify-end">
-                    <Button variant="outline" onClick={() => window.print()} className="gap-2 rounded-xl">
+                    <Button
+                      variant="outline"
+                      className="gap-2 rounded-xl"
+                      onClick={() => {
+                        if (isNativeApp()) {
+                          const html = buildCameroonReportCardDocument(adminReportCard, { title: "Report Card", school: user?.school });
+                          downloadHtmlDocument(html, `${(adminReportCard.student?.name || "student").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-report-card.html`);
+                        } else {
+                          window.print();
+                        }
+                      }}
+                    >
                       <Printer className="h-4 w-4" /> Print
                     </Button>
                     <Button
@@ -1858,7 +1870,7 @@ export default function GradeBookPage() {
           </div>
           {reportCard && (
             <div className="flex gap-2">
-              <Button variant="outline" className="rounded-xl h-11 px-5 font-bold" onClick={() => window.print()}>
+              <Button variant="outline" className="rounded-xl h-11 px-5 font-bold" onClick={() => isNativeApp() ? handleDownload("My Report Card") : window.print()}>
                 <Printer className="w-4 h-4 mr-2" /> Print
               </Button>
               <Button variant="outline" className="rounded-xl h-11 px-6 font-bold" onClick={() => handleDownload("My Report Card")} disabled={isGeneratingReportPdf}>

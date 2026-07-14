@@ -42,6 +42,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { fileToDataUrl, getApiErrorMessage } from "@/lib/api/errors";
 import { SchoolHierarchyManager } from "@/components/dashboard/school-hierarchy-manager";
+import { CommunityPeople } from "@/components/dashboard/community-people";
 import { normalizeList } from "@/lib/dashboard-adapters";
 import { MediaRenderer } from "@/components/shared/MediaRenderer";
 
@@ -174,6 +175,7 @@ function SchoolAdminHierarchyOverview({ schoolId, schoolName }: { schoolId: stri
       admins,
       teachers,
       supportStaff,
+      students,
       sections,
       classes,
       uniqueClasses: classes.length,
@@ -337,24 +339,17 @@ function SchoolAdminHierarchyOverview({ schoolId, schoolName }: { schoolId: stri
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-primary">
             <ShieldCheck className="h-5 w-5 text-secondary" />
-            Leadership Registry
+            School Directory
           </CardTitle>
           <CardDescription>
-            Active administrators and staff assignments detected for this school.
+            Active staff and enrolled students detected for this school.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {pageData.admins.concat(pageData.teachers, pageData.supportStaff).length === 0 ? (
-            <p className="text-sm text-muted-foreground">Staff allocations will appear here once the school account fetches its registry successfully.</p>
-          ) : (
-            pageData.admins.concat(pageData.teachers, pageData.supportStaff).slice(0, 12).map((member: any) => (
-              <div key={member.id} className="rounded-2xl border bg-accent/10 p-4">
-                <p className="font-bold text-primary">{member.name}</p>
-                <p className="text-xs text-muted-foreground">{member.email || member.matricule || "No contact recorded"}</p>
-                <Badge className="mt-3 bg-primary/10 text-primary">{formatRole(member.role)}</Badge>
-              </div>
-            ))
-          )}
+        <CardContent>
+          <CommunityPeople
+            staff={pageData.admins.concat(pageData.teachers, pageData.supportStaff)}
+            students={pageData.students}
+          />
         </CardContent>
       </Card>
 

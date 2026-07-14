@@ -49,6 +49,7 @@ import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { usersService } from "@/lib/api/services/users.service";
 import { schoolsService } from "@/lib/api/services/schools.service";
+import { usePagination, DataPagination } from "@/components/ui/data-pagination";
 import type { HierarchyClass, HierarchyClassSubject, HierarchySubSchool } from "@/lib/api/types";
 
 const EXECUTIVE_STAFF_CREATION_ROLES = ["SCHOOL_ADMIN", "SUB_ADMIN", "TEACHER", "BURSAR", "LIBRARIAN"];
@@ -477,6 +478,7 @@ export default function StaffPage() {
       s.matricule?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.id?.toLowerCase().includes(searchTerm.toLowerCase())
     );
+  const staffPager = usePagination(filteredStaff, 20);
 
   const handleRoleChange = (role: string) => {
     setNewStaff((current) => ({
@@ -789,7 +791,7 @@ export default function StaffPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredStaff.map((staff: any) => (
+            {staffPager.pageItems.map((staff: any) => (
               <Card key={staff.id} className="border-none shadow-xl hover:shadow-2xl transition-all duration-300 bg-white rounded-[2rem] overflow-hidden group">
                 <CardHeader className="flex flex-row items-center gap-4 pb-6">
                   <Avatar className="h-16 w-16 rounded-2xl border-2 border-primary/10 shadow-lg shrink-0">
@@ -885,6 +887,7 @@ export default function StaffPage() {
               </Card>
             ))}
           </div>
+          <DataPagination pager={staffPager} label="staff" />
 
           {filteredStaff.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-[2rem] border border-dashed bg-white py-16 text-center shadow-sm">

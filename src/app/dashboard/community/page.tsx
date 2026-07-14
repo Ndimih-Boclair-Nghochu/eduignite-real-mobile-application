@@ -263,78 +263,6 @@ function SchoolAdminHierarchyOverview({ schoolId, schoolName }: { schoolId: stri
         ))}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card className="border-none shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-primary">
-              <Building2 className="h-5 w-5 text-secondary" />
-              Section Snapshot
-            </CardTitle>
-            <CardDescription>
-              {resolvedSchoolName} sections derived from live student placement data.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {pageData.sections.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Sections will appear here once students are linked to classes.</p>
-            ) : (
-              pageData.sections.map((section) => (
-                <div key={section.key} className="rounded-2xl border bg-accent/10 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-black uppercase text-primary">{section.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {section.classCount} class stream{section.classCount === 1 ? "" : "s"}
-                      </p>
-                    </div>
-                    <Badge className="bg-primary/10 text-primary">{section.students} students</Badge>
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-primary">
-              <GraduationCap className="h-5 w-5 text-secondary" />
-              Class Streams
-            </CardTitle>
-            <CardDescription>
-              Real class registry grouped from live student records.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {pageData.classes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Class streams will appear here once student admissions are saved.</p>
-            ) : (
-              pageData.classes.map((classroom) => (
-                <div key={classroom.name} className="rounded-2xl border bg-white p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-black uppercase text-primary">{classroom.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {classroom.level} · {classroom.section}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-black text-primary">{classroom.students}</p>
-                      <p className="text-xs text-muted-foreground">students</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Badge variant="outline" className="border-primary/10 text-primary">
-                      Average {classroom.average}/20
-                    </Badge>
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
       <Card className="border-none shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-primary">
@@ -359,7 +287,7 @@ function SchoolAdminHierarchyOverview({ schoolId, schoolName }: { schoolId: stri
 }
 
 export default function CommunityPage() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { language } = useI18n();
   const { toast } = useToast();
 
@@ -569,7 +497,18 @@ export default function CommunityPage() {
     });
   };
 
-  if (isSchoolAdmin && user?.school?.id) {
+  // "Hierarchy & Sections" is served on this route for school admins. While the
+  // account is still hydrating, show a loader rather than briefly falling
+  // through to the community content — that flash was sticking and showing the
+  // wrong tab content until the user logged out and back in.
+  if (isSchoolAdmin) {
+    if (authLoading || !user?.school?.id) {
+      return (
+        <div className="flex justify-center items-center h-40">
+          <Loader2 className="w-8 h-8 animate-spin text-primary/30" />
+        </div>
+      );
+    }
     return <SchoolAdminHierarchyOverview schoolId={user.school.id} schoolName={user.school.name} />;
   }
 

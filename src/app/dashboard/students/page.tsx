@@ -33,6 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { BookOpen, ChevronDown, Eye, FileText, KeyRound, Link2, Loader2, Plus, Search, Sparkles, Upload, UserPlus, Users } from "lucide-react";
 import { apiClient } from "@/lib/api/client";
 import { generateBrandedTablePdf } from "@/lib/pdf-branded";
+import { usePagination, DataPagination } from "@/components/ui/data-pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type {
   BulkStudentUploadRequest,
@@ -371,6 +372,10 @@ export default function StudentsPage() {
   const [isBulkOpen, setIsBulkOpen] = useState(false);
   const [bulkResult, setBulkResult] = useState<BulkUploadResult | null>(null);
   const [isBulkSubmitting, setIsBulkSubmitting] = useState(false);
+  // Generate-once guard: after a successful generation the admin must refill the
+  // form (re-enter the count) before they can generate again, to avoid
+  // accidentally generating a second batch of matricules.
+  const [bulkGenerated, setBulkGenerated] = useState(false);
   const [isParentDialogOpen, setIsParentDialogOpen] = useState(false);
   const [isParentWorkflowRunning, setIsParentWorkflowRunning] = useState(false);
   const [createdParentResult, setCreatedParentResult] = useState<ParentCreateResult | null>(null);
@@ -686,6 +691,9 @@ export default function StudentsPage() {
       return matchesSearch && matchesSubSchool && matchesClass;
     });
   }, [adminClassFilter, adminSubSchoolFilter, filteredAdminClassOptions, hierarchyClasses, registryCards, searchTerm, subSchools]);
+  // Paginate the user tables/grids at 20 records per page.
+  const registryPager = usePagination(filteredRegistryCards, 20);
+  const parentsPager = usePagination(parents, 20);
   const registryLoading = studentsQuery.isLoading || studentUsersQuery.isLoading;
   const registryError =
     studentsQuery.error
@@ -1102,16 +1110,65 @@ export default function StudentsPage() {
     }
   };
 
-  const downloadActivationSheet = (html: string, className: string) => {
-    const blob = new Blob([html], { type: "text/html;charset=utf-8;" });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${(className || "student_activation_sheet").replace(/\s+/g, "_").toLowerCase()}_activation_sheet.html`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
+  // Build a well-styled, branded PDF activation sheet from the generated
+  // matricules (never an HTML dump). Works on web/desktop and saves into the
+  // device eduignite folder on the mobile app.
+  const downloadActivationPdf = (students: any[], className: string) => {
+    const rows = (students || []).filter(Boolean);
+    if (rows.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Nothing to download",
+        description: "No generated matricules were found for this batch.",
+      });
+      return;
+    }
+    generateBrandedTablePdf({
+      title: "Student Activation Matricules",
+      subtitle: className || bulkData.student_class || "Activation sheet",
+      schoolName: user?.school?.name || "EduIgnite",
+      columns: ["#", "Matricule", "Class", "Level", "Section"],
+      rows: rows.map((student, index) => [
+        index + 1,
+        student.matricule || "",
+        student.student_class || className || "",
+        formatHierarchyValue(student.class_level) || "",
+        student.section || "",
+      ]),
+      fileName: `${(className || "student_activation_sheet").replace(/\s+/g, "_").toLowerCase()}_matricules`,
+    });
+  };
+
+  // Turn any backend/network failure into a clear, plain-text reason the admin
+  // can act on — never a raw HTML error page.
+  const plainErrorMessage = (error: any, fallback: string): string => {
+    const data = error?.response?.data;
+    if (typeof data === "string") {
+      const text = data.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+      return text ? text.slice(0, 400) : fallback;
+    }
+    if (data && typeof data === "object") {
+      const fromRows = data.failed_rows?.[0]?.reason;
+      const nonField = Array.isArray(data.non_field_errors) ? data.non_field_errors.join(" ") : "";
+      const firstField = (() => {
+        for (const [key, value] of Object.entries(data)) {
+          if (["detail", "reason", "failed_rows", "non_field_errors"].includes(key)) continue;
+          if (Array.isArray(value) && value.length) return `${key}: ${value.join(" ")}`;
+          if (typeof value === "string") return `${key}: ${value}`;
+        }
+        return "";
+      })();
+      return (
+        data.detail ||
+        data.reason ||
+        fromRows ||
+        nonField ||
+        firstField ||
+        error?.message ||
+        fallback
+      );
+    }
+    return error?.message || fallback;
   };
 
   const handleBulkUpload = async () => {
@@ -1147,6 +1204,14 @@ export default function StudentsPage() {
       });
       return;
     }
+    if (bulkGenerated && !bulkData.file) {
+      toast({
+        variant: "destructive",
+        title: "Already generated",
+        description: "This batch has already been generated. Enter a new number of matricules to generate again.",
+      });
+      return;
+    }
 
     setIsBulkSubmitting(true);
     try {
@@ -1155,23 +1220,25 @@ export default function StudentsPage() {
         school_id: currentSchoolId,
       });
       setBulkResult(result);
-      if (result.document_html) {
-        downloadActivationSheet(result.document_html, bulkData.student_class);
+      const generated = result.generated_students || [];
+      if (generated.length > 0) {
+        downloadActivationPdf(generated, bulkData.student_class);
       }
+      // Lock the form so a second click cannot generate another batch; the
+      // admin must re-enter the count to generate again.
+      setBulkGenerated(true);
+      setBulkData((current) => ({ ...current, generation_count: 0, file: undefined }));
       toast({
         title: "Matricules generated",
         description: result.detail || `${result.created_count || 0} matricules were generated for ${bulkData.student_class}.`,
       });
     } catch (error: any) {
-      const responseData = error?.response?.data as BulkUploadResult | undefined;
-      setBulkResult(responseData || null);
+      const responseData = error?.response?.data;
+      setBulkResult(responseData && typeof responseData === "object" ? responseData : null);
       toast({
         variant: "destructive",
         title: "Generation failed",
-        description:
-          responseData?.detail ||
-          responseData?.failed_rows?.[0]?.reason ||
-          "We could not generate the class matricules.",
+        description: plainErrorMessage(error, "We could not generate the class matricules. Please review the form and try again."),
       });
     } finally {
       setIsBulkSubmitting(false);
@@ -1843,7 +1910,7 @@ export default function StudentsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRegistryCards.map((student) => (
+                    {registryPager.pageItems.map((student) => (
                       <TableRow key={student.key} className="odd:bg-accent/5">
                         <TableCell className="pl-6">
                           <div className="flex items-center gap-3">
@@ -1918,6 +1985,7 @@ export default function StudentsPage() {
                   </TableBody>
                 </Table>
               )}
+              <DataPagination pager={registryPager} label="students" />
             </CardContent>
           </Card>
 
@@ -2110,7 +2178,7 @@ export default function StudentsPage() {
                 </CardContent>
               </Card>
             ) : (
-              parents.map((parent) => {
+              parentsPager.pageItems.map((parent) => {
                 const linkedChildren = parentChildrenMap.get(parent.id) ?? [];
 
                 return (
@@ -2175,6 +2243,7 @@ export default function StudentsPage() {
               })
             )}
           </div>
+          <DataPagination pager={parentsPager} label="parents" />
         </TabsContent>
 
         <TabsContent value="honour-roll" className="mt-6">
@@ -2628,7 +2697,7 @@ export default function StudentsPage() {
                   min={1}
                   max={500}
                   value={bulkData.generation_count || ""}
-                  onChange={(event) => setBulkData((current) => ({ ...current, generation_count: Number(event.target.value || 0) }))}
+                  onChange={(event) => { setBulkGenerated(false); setBulkData((current) => ({ ...current, generation_count: Number(event.target.value || 0) })); }}
                   placeholder="30"
                 />
               </div>
@@ -2661,7 +2730,7 @@ export default function StudentsPage() {
               <p className="font-black uppercase tracking-widest text-primary">How It Works</p>
               <p>Each matricule is single-use and remains attached to the selected sub-school, class, section, and level.</p>
               <p>If a matricule has already been used, the activation flow now tells the student that the matricule is already used.</p>
-              <p>The downloaded activation sheet can be printed directly or saved as PDF from the browser.</p>
+              <p>The activation sheet downloads as a styled PDF you can print or share directly.</p>
             </div>
 
             {bulkResult && (
@@ -2705,13 +2774,13 @@ export default function StudentsPage() {
                       Row {row.row}{row.name ? ` (${row.name})` : ""}: {row.reason || "This row failed validation."}
                     </div>
                   ))}
-                  {bulkResult.document_html && (
+                  {(bulkResult.generated_students || []).length > 0 && (
                     <Button
                       variant="outline"
                       className="rounded-xl border-primary/10 font-bold text-primary"
-                      onClick={() => downloadActivationSheet(bulkResult.document_html || "", bulkData.student_class)}
+                      onClick={() => downloadActivationPdf(bulkResult.generated_students || [], bulkData.student_class)}
                     >
-                      Download Activation Sheet
+                      Download Activation Sheet (PDF)
                     </Button>
                   )}
                 </CardContent>
@@ -2719,9 +2788,9 @@ export default function StudentsPage() {
             )}
           </div>
           <DialogFooter className="border-t bg-accent/20 p-6">
-            <Button onClick={handleBulkUpload} disabled={isBulkSubmitting} className="h-14 w-full gap-3 rounded-2xl font-black uppercase tracking-widest text-xs">
+            <Button onClick={handleBulkUpload} disabled={isBulkSubmitting || (bulkGenerated && !bulkData.file)} className="h-14 w-full gap-3 rounded-2xl font-black uppercase tracking-widest text-xs">
               {isBulkSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
-              {bulkData.file ? "Import CSV" : "Generate Matricules"}
+              {bulkData.file ? "Import CSV" : bulkGenerated ? "Enter a new count to generate again" : "Generate Matricules"}
             </Button>
           </DialogFooter>
         </DialogContent>

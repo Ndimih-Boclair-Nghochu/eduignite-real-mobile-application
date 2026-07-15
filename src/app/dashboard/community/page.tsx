@@ -263,24 +263,6 @@ function SchoolAdminHierarchyOverview({ schoolId, schoolName }: { schoolId: stri
         ))}
       </div>
 
-      <Card className="border-none shadow-sm">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-primary">
-            <ShieldCheck className="h-5 w-5 text-secondary" />
-            School Directory
-          </CardTitle>
-          <CardDescription>
-            Active staff and enrolled students detected for this school.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <CommunityPeople
-            staff={pageData.admins.concat(pageData.teachers, pageData.supportStaff)}
-            students={pageData.students}
-          />
-        </CardContent>
-      </Card>
-
       <SchoolHierarchyManager schoolId={schoolId} schoolName={resolvedSchoolName} />
     </div>
   );

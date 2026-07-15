@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { generateBrandedTablePdf } from "@/lib/pdf-branded";
+import { generateBrandedTablePdf, generateReportCardsPdf } from "@/lib/pdf-branded";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -1206,9 +1206,14 @@ export default function GradeBookPage() {
       const reportLabel = adminReportScope === "term"
         ? `${termLabel(Number(selectedAdminTerm))} ${selectedAdminAcademicYear}`
         : sequences.find((sequence: any) => sequence.id === selectedSequence)?.name || "Sequence";
-      const html = `<!doctype html><html><head><meta charset="utf-8" /><title>${escapeHtml(className)} Report Cards</title></head><body style="margin:0;background:#f8fafc;">${validCards.map((card) => buildCameroonReportCardHtml(card, { title: `${className} ${reportLabel} Report Card`, school: user?.school })).join("")}</body></html>`;
-      downloadHtmlDocument(html, `${className.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${adminReportScope}-report-cards.html`);
-      toast({ title: "Report cards generated", description: `${validCards.length} report cards were prepared for printing or PDF export.` });
+      // One report card per page (fit-to-page, ordered, no page numbers) so each
+      // student's card can be printed individually from the same document.
+      generateReportCardsPdf(validCards, {
+        schoolName: user?.school?.name || "EduIgnite",
+        title: `${className} ${reportLabel} Report Card`,
+        fileName: `${className.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${adminReportScope}-report-cards`,
+      });
+      toast({ title: "Report cards generated", description: `${validCards.length} report cards were prepared — one per page for individual printing.` });
     } catch (error: any) {
       toast({
         variant: "destructive",

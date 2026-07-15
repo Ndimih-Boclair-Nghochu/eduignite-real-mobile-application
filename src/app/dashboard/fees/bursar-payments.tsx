@@ -24,11 +24,10 @@ import { generateReceiptPdf } from "@/lib/pdf-branded";
 
 const CURRENCY = "XAF";
 
+// Platform charges are collected only via mobile money — no cash.
 const PAYMENT_METHODS = [
-  { value: "cash", label: "Cash" },
-  { value: "mobile_money", label: "Mobile Money" },
-  { value: "bank_transfer", label: "Bank Transfer" },
-  { value: "cheque", label: "Cheque" },
+  { value: "mtn_momo", label: "MTN Mobile Money" },
+  { value: "orange_money", label: "Orange Money" },
 ];
 
 function money(value: number | string | undefined, currency = CURRENCY) {
@@ -115,7 +114,7 @@ export function BursarPayments() {
   const [newFeeType, setNewFeeType] = useState({ name: "", amount: "" });
   const [selectedFeeId, setSelectedFeeId] = useState("");
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("cash");
+  const [method, setMethod] = useState("mtn_momo");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
   const [receipt, setReceipt] = useState<any | null>(null);

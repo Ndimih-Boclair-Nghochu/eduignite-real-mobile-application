@@ -318,7 +318,7 @@ export default function StudentDetailsPage() {
     loadAttendance();
   }, [rawStudent?.id]);
 
-  const handleDownload = (title: string) => {
+  const handleDownload = async (title: string) => {
     if (!student) return;
     const type =
       title === "Digital ID Card"

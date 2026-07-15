@@ -70,6 +70,7 @@ import { attendanceService } from "@/lib/api/services/attendance.service";
 import { resolveMediaUrl } from "@/lib/media";
 import { downloadHtmlDocument, escapeHtml } from "@/lib/browser-download";
 import { buildCameroonReportCardDocument, buildCameroonReportCardHtml } from "@/lib/cameroon-report-card";
+import { StudentIdCard } from "@/components/student-id-card";
 
 const CLASSES = ["6ème / Form 1", "5ème / Form 2", "4ème / Form 3", "3ème / Form 4", "2nde / Form 5", "1ère / Lower Sixth", "Terminale / Upper Sixth"];
 
@@ -692,7 +693,35 @@ export default function StudentDetailsPage() {
                 </div>
               )
             ) : (
-              <IDCardPreview student={student} platform={platformSettings} />
+              // Same official ID card component the school admin uses — identical
+              // design, data and a working verification QR.
+              <div className="flex justify-center">
+                <StudentIdCard
+                  student={{
+                    name: student.name,
+                    matricule: rawStudent?.user?.matricule || student.id,
+                    className: student.class,
+                    section: student.section,
+                    dob: student.dob,
+                    placeOfBirth: (rawStudent as any)?.place_of_birth || (rawStudent as any)?.placeOfBirth || "",
+                    gender: student.gender,
+                    admissionNumber: (rawStudent as any)?.admission_number || student.id,
+                    avatar: student.avatar,
+                    qrCode: (rawStudent as any)?.qr_code || "",
+                    guardian: student.guardian,
+                    guardianPhone: student.guardianPhone,
+                  }}
+                  school={{
+                    name: student.school?.name || currentUser?.school?.name || "School Name",
+                    motto: student.school?.motto,
+                    logo: student.school?.logo,
+                    address: student.school?.address || student.school?.location,
+                    phone: student.school?.phone,
+                    principal: student.school?.principal,
+                  }}
+                  platform={{ name: platformSettings?.name, logo: platformSettings?.logo }}
+                />
+              </div>
             )}
           </div>
 

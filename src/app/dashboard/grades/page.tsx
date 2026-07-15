@@ -246,6 +246,54 @@ function extractApiErrorMessage(value: unknown): string {
   return "";
 }
 
+// Pivot raw grades into a per-subject ledger (Seq 1 / Seq 2 / Average) — the
+// exact shape the parent account's "Test Marks Follow-up" table uses, so the
+// student marks table can render identically.
+function buildGradeLedger(grades: any[] = []) {
+  const grouped = grades.reduce((acc: Record<string, any>, grade: any) => {
+    const subject = grade.subject?.name || grade.subject_name || "Unknown Subject";
+    const coefficient = Number(grade.subject?.coefficient || grade.coefficient || 1);
+
+    if (!acc[subject]) {
+      acc[subject] = {
+        subject,
+        teacher: grade.teacher_name || grade.teacher?.name || "",
+        coef: coefficient,
+        seq1: 0,
+        seq2: 0,
+        average: 0,
+        total: 0,
+        rank: "-",
+        initials: subject.substring(0, 2).toUpperCase(),
+        scores: [] as number[],
+      };
+    }
+
+    const score = Number(grade.score || 0);
+    const sequenceName = `${grade.sequence?.name || grade.sequence_name || ""}`.toLowerCase();
+    if (sequenceName.includes("1")) {
+      acc[subject].seq1 = score;
+    } else if (sequenceName.includes("2")) {
+      acc[subject].seq2 = score;
+    } else if (acc[subject].seq1 === 0) {
+      acc[subject].seq1 = score;
+    } else if (acc[subject].seq2 === 0) {
+      acc[subject].seq2 = score;
+    }
+
+    acc[subject].scores.push(score);
+    return acc;
+  }, {});
+
+  return Object.values(grouped).map((entry: any) => {
+    const average =
+      entry.scores.length > 0
+        ? entry.scores.reduce((sum: number, score: number) => sum + score, 0) / entry.scores.length
+        : 0;
+    return { ...entry, average, total: average * entry.coef };
+  });
+}
+
 export default function GradeBookPage() {
   const { user } = useAuth();
   const { t, language } = useI18n();
@@ -1860,6 +1908,8 @@ export default function GradeBookPage() {
         status: score >= 10 ? "Passed" : "Needs Improvement",
       };
     });
+    // Same per-subject ledger the parent account uses, so both tables match.
+    const studentGradeLedger = buildGradeLedger(studentTestGrades);
 
     return (
       <div className="space-y-8 pb-20">
@@ -1974,61 +2024,62 @@ export default function GradeBookPage() {
           </TabsContent>
 
           <TabsContent value="test" className="mt-6">
-            <Card className="border-none bg-white shadow-sm">
-              <CardHeader className="border-b bg-primary/5">
-                <CardTitle className="flex items-center gap-2 text-primary">
-                  <FileSpreadsheet className="h-5 w-5" /> Test Marks
-                </CardTitle>
-                <CardDescription>
-                  Marks saved by your teachers for follow-up before official report cards are published.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="pl-6">Subject</TableHead>
-                        <TableHead>Teacher</TableHead>
-                        <TableHead>Sequence</TableHead>
-                        <TableHead className="text-center">Mark /20</TableHead>
-                        <TableHead>Comment</TableHead>
-                        <TableHead className="pr-6 text-right">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {isStudentTestLoading ? (
-                        <TableRow>
-                          <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
-                            <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
-                            Loading saved marks...
-                          </TableCell>
-                        </TableRow>
-                      ) : testMarks.length ? (
-                        testMarks.map((mark) => (
-                          <TableRow key={mark.id}>
-                            <TableCell className="pl-6 font-bold text-primary">{mark.subject}</TableCell>
-                            <TableCell>{mark.teacher}</TableCell>
-                            <TableCell>{mark.sequence}</TableCell>
-                            <TableCell className="text-center font-black">{mark.score.toFixed(2)}</TableCell>
-                            <TableCell className="max-w-xs text-sm text-muted-foreground">{mark.comment || "-"}</TableCell>
-                            <TableCell className="pr-6 text-right">
-                              <Badge className={cn(mark.score >= 10 ? "bg-green-600" : "bg-amber-600")}>
-                                {mark.status}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
-                            No test marks have been saved for your current class yet.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
+            <Card className="border-none shadow-xl overflow-hidden rounded-[2.5rem] bg-white">
+              <CardHeader className="bg-primary p-8 text-white">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl font-black uppercase tracking-tighter">Test Marks Follow-up</CardTitle>
+                    <CardDescription className="text-white/60">Teacher-saved marks for academic follow-up before official reports are released.</CardDescription>
+                  </div>
                 </div>
+              </CardHeader>
+              <CardContent className="p-0 overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-accent/10">
+                    <TableRow className="uppercase text-[10px] font-black tracking-widest border-b">
+                      <TableHead className="pl-8 py-4">Subject</TableHead>
+                      <TableHead className="text-center">Coefficient</TableHead>
+                      <TableHead className="text-center bg-primary/5">Seq 1</TableHead>
+                      <TableHead className="text-center bg-primary/5">Seq 2</TableHead>
+                      <TableHead className="text-center">Average</TableHead>
+                      <TableHead className="text-right pr-8">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isStudentTestLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                          <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
+                          Loading saved marks...
+                        </TableCell>
+                      </TableRow>
+                    ) : studentGradeLedger.length > 0 ? (
+                      studentGradeLedger.map((g: any, idx: number) => (
+                        <TableRow key={idx} className="h-16 border-b last:border-0 hover:bg-accent/5 transition-colors">
+                          <TableCell className="pl-8 font-black uppercase text-xs text-primary">{g.subject}</TableCell>
+                          <TableCell className="text-center font-mono font-bold">{g.coef}</TableCell>
+                          <TableCell className="text-center font-black text-primary bg-primary/5">{g.seq1.toFixed(2)}</TableCell>
+                          <TableCell className="text-center font-black text-primary bg-primary/5">{g.seq2.toFixed(2)}</TableCell>
+                          <TableCell className="text-center font-black text-secondary">{g.average.toFixed(2)}</TableCell>
+                          <TableCell className="text-right pr-8">
+                            <Badge className={cn(
+                              "text-[9px] font-black border-none px-3",
+                              g.average >= 10 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                            )}>
+                              {g.average >= 10 ? 'PASSED' : 'FAILED'}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                          No published grades are available for you yet.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
               </CardContent>
             </Card>
           </TabsContent>

@@ -59,7 +59,7 @@ export function NativeDownloadBridge() {
         .then(() => {
           toast({
             title: "Saved",
-            description: `${fileName} is in your Documents/eduignite folder.`,
+            description: `${fileName} is in your eduignite folder (Pictures for images, Documents for files).`,
           });
         })
         .catch((err: any) => {

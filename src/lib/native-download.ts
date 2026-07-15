@@ -105,6 +105,14 @@ function withCorrectExtension(name: string, mime?: string): string {
   return `${name}.${ext}`;
 }
 
+// Pictures go in eduignite/Pictures, everything else (PDF, docs, csv, ...) in
+// eduignite/Documents — so images and documents are never mixed together.
+export const EDUIGNITE_PICTURES = "Pictures";
+export const EDUIGNITE_DOCUMENTS = "Documents";
+function subFolderForMime(mime?: string): string {
+  return (mime || "").toLowerCase().startsWith("image/") ? EDUIGNITE_PICTURES : EDUIGNITE_DOCUMENTS;
+}
+
 export async function saveToEduignite(opts: {
   fileName: string;
   url?: string;
@@ -115,8 +123,8 @@ export async function saveToEduignite(opts: {
   const { base64, mime } = await resolveBase64(opts);
   if (!base64) throw new Error("There was no file data to save.");
 
-  // On older Android the public Documents folder needs a storage grant. Ask for
-  // it best-effort; on Android 13+ this is a no-op and always resolves.
+  // On older Android the public storage folders need a grant. Ask for it
+  // best-effort; on Android 13+ this is a no-op and always resolves.
   try {
     const status = await Filesystem.checkPermissions();
     if (status.publicStorage !== "granted") {
@@ -126,13 +134,24 @@ export async function saveToEduignite(opts: {
     /* permission API not available on this platform — continue */
   }
 
-  const finalName = withCorrectExtension(sanitizeFileName(opts.fileName), opts.mimeType || mime);
-  const path = `${EDUIGNITE_FOLDER}/${finalName}`;
-  const result = await Filesystem.writeFile({
-    path,
-    data: base64,
-    directory: Directory.Documents,
-    recursive: true,
-  });
-  return result.uri;
+  // Save with the extension the real content type implies, so a PDF lands as a
+  // .pdf document (not an image), and route it into the matching subfolder.
+  const effectiveMime = opts.mimeType || mime;
+  const finalName = withCorrectExtension(sanitizeFileName(opts.fileName), effectiveMime);
+  const path = `${EDUIGNITE_FOLDER}/${subFolderForMime(effectiveMime)}/${finalName}`;
+
+  // Prefer the shared external-storage root so the "eduignite" folder sits next
+  // to the user's other files (visible in any file manager / gallery); fall back
+  // to the app Documents directory if the platform blocks the shared root.
+  const targets = [Directory.ExternalStorage, Directory.Documents];
+  let lastError: unknown;
+  for (const directory of targets) {
+    try {
+      const result = await Filesystem.writeFile({ path, data: base64, directory, recursive: true });
+      return result.uri;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Could not save the file to your device.");
 }

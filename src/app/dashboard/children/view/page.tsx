@@ -6,7 +6,8 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n-context";
 import { useAuth } from "@/lib/auth-context";
 import { useStudent, useMyChildren } from "@/lib/hooks/useStudents";
-import { useGrades } from "@/lib/hooks/useGrades";
+import { useGrades, useActiveSequence } from "@/lib/hooks/useGrades";
+import { gradesService } from "@/lib/api/services/grades.service";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -194,6 +195,40 @@ export default function StudentDetailsPage() {
   const { data: studentData, isLoading: studentLoading } = useStudent(studentId || '');
   const { data: myChildrenData } = useMyChildren();
   const { data: gradesData, refetch: refetchGrades } = useGrades({ student: studentId || undefined });
+  const { data: activeSequenceData } = useActiveSequence();
+
+  // The parent must see the SAME official report card as the school admin and the
+  // student — same data, styling and a working verification QR. So instead of
+  // rebuilding it from local grades, fetch the official published report card
+  // from the backend (which only returns it once the admin has published it).
+  const [officialReportCard, setOfficialReportCard] = useState<any>(null);
+  const [officialReportError, setOfficialReportError] = useState("");
+  const reportSequenceId =
+    activeSequenceData?.results?.[0]?.id ||
+    (gradesData?.results || []).map((g: any) => g.sequence?.id || g.sequence_id).find(Boolean) ||
+    "";
+
+  useEffect(() => {
+    let cancelled = false;
+    if (viewingDoc?.type !== "report" || !studentId || !reportSequenceId) {
+      setOfficialReportCard(null);
+      setOfficialReportError("");
+      return;
+    }
+    setOfficialReportError("");
+    gradesService
+      .getReportCard(studentId, reportSequenceId)
+      .then((data: any) => { if (!cancelled) setOfficialReportCard(data); })
+      .catch((error: any) => {
+        if (cancelled) return;
+        setOfficialReportCard(null);
+        setOfficialReportError(
+          error?.response?.data?.detail ||
+          "This report card has not been published by the school admin yet."
+        );
+      });
+    return () => { cancelled = true; };
+  }, [viewingDoc, studentId, reportSequenceId]);
 
   const childOptions = myChildrenData?.results || [];
   const fallbackChild =
@@ -292,7 +327,21 @@ export default function StudentDetailsPage() {
           : "report";
 
     if (type === "report") {
-      const html = buildCameroonReportCardDocument(buildReportCardPayloadFromStudent(student, title), {
+      // Prefer the official published report card (same data + working QR as the
+      // admin/student) and only fall back to the local rebuild if it is missing.
+      let cardData = officialReportCard;
+      if (!cardData && studentId && reportSequenceId) {
+        try {
+          cardData = await gradesService.getReportCard(studentId, reportSequenceId);
+        } catch {
+          cardData = null;
+        }
+      }
+      if (!cardData) {
+        toast({ variant: "destructive", title: "Report card unavailable", description: officialReportError || "This report card has not been published by the school admin yet." });
+        return;
+      }
+      const html = buildCameroonReportCardDocument(cardData, {
         title,
         school: student.school,
         student,
@@ -625,16 +674,23 @@ export default function StudentDetailsPage() {
           
           <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-muted scrollbar-thin">
             {viewingDoc?.type === 'report' ? (
-              <div
-                dangerouslySetInnerHTML={{
-                  __html: buildCameroonReportCardHtml(buildReportCardPayloadFromStudent(student, viewingDoc.term), {
-                    title: viewingDoc?.title || "Published Report Card",
-                    school: student?.school,
-                    student,
-                    attendance: student?.attendanceSummary,
-                  }),
-                }}
-              />
+              officialReportCard ? (
+                // Identical to the admin/student view: the official published card + QR.
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: buildCameroonReportCardHtml(officialReportCard, {
+                      title: viewingDoc?.title || "Published Report Card",
+                      school: student?.school,
+                      student,
+                      attendance: student?.attendanceSummary,
+                    }),
+                  }}
+                />
+              ) : (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center text-sm font-semibold text-amber-800">
+                  {officialReportError || "Loading the official report card..."}
+                </div>
+              )
             ) : (
               <IDCardPreview student={student} platform={platformSettings} />
             )}

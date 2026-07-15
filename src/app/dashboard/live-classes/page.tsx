@@ -48,6 +48,8 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSubjects } from "@/lib/hooks/useGrades";
+import { useQuery } from "@tanstack/react-query";
+import { gradesService } from "@/lib/api/services/grades.service";
 import { useSchoolSettings } from "@/lib/hooks/useSchools";
 import {
   useLiveClasses,
@@ -445,7 +447,33 @@ export default function OnlineClassesPage() {
   const enrollMutation = useEnrollInClass();
   const unenrollMutation = useUnenrollFromClass();
 
+  // A teacher's real classes/subjects come from their assignments (grade sheet),
+  // not the admin-scoped global subject list — otherwise the dropdowns are blank.
+  const teacherSheetQuery = useQuery({
+    queryKey: ["live-class-teacher-sheet", user?.id],
+    queryFn: () => gradesService.getTeacherGradeSheet(),
+    enabled: !!isTeacher,
+    staleTime: 60_000,
+  });
+  const teacherSheetClasses = useMemo(
+    () => (Array.isArray(teacherSheetQuery.data?.classes) ? teacherSheetQuery.data.classes : []),
+    [teacherSheetQuery.data],
+  );
+  const teacherSheetSubjectOptions = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    teacherSheetClasses.forEach((schoolClass: any) =>
+      (schoolClass.subjects ?? []).forEach((subject: any) => {
+        const name = subject.subject_name || subject.name;
+        if (!name) return;
+        if (!map.has(name)) map.set(name, new Set<string>());
+        if (schoolClass.name) map.get(name)!.add(schoolClass.name);
+      }),
+    );
+    return Array.from(map.entries()).map(([name, classes]) => ({ name, classes: Array.from(classes) }));
+  }, [teacherSheetClasses]);
+
   const subjectOptions = useMemo(() => {
+    if (isTeacher && teacherSheetSubjectOptions.length) return teacherSheetSubjectOptions;
     const list = subjectsData?.results || [];
     const scoped = isTeacher
       ? list.filter((subject: any) => subject.teacher === user?.id || subject.teacher === user?.uid)
@@ -454,13 +482,16 @@ export default function OnlineClassesPage() {
       name: subject.name,
       classes: parseSubjectPlacement(subject.level),
     }));
-  }, [isTeacher, subjectsData?.results, user?.id, user?.uid]);
+  }, [isTeacher, teacherSheetSubjectOptions, subjectsData?.results, user?.id, user?.uid]);
 
   const availableClasses = useMemo(() => {
+    if (isTeacher && teacherSheetClasses.length) {
+      return Array.from(new Set(teacherSheetClasses.map((c: any) => c.name).filter(Boolean)));
+    }
     const subjectClasses = subjectOptions.flatMap((subject) => subject.classes);
     const schoolClasses = schoolSettings?.class_levels || [];
     return Array.from(new Set([...subjectClasses, ...schoolClasses].filter(Boolean)));
-  }, [schoolSettings?.class_levels, subjectOptions]);
+  }, [isTeacher, teacherSheetClasses, schoolSettings?.class_levels, subjectOptions]);
 
   const allClasses = allData?.results || [];
   const liveNow = liveNowData?.results || [];

@@ -31,6 +31,7 @@ import {
 import { useMySchool, useHierarchyClasses } from "@/lib/hooks/useSchools";
 import type { FeeStructure, SchoolFeeAssignment, StudentSchoolFeeRecord } from "@/lib/api/types";
 import { BursarPayments } from "./bursar-payments";
+import { PlatformFees } from "./platform-fees";
 
 const DEFAULT_CURRENCY = "XAF";
 const ALL_CLASSES = "all-classes";
@@ -682,8 +683,9 @@ export default function FeesPage() {
       </div>
 
       <Tabs defaultValue="payments" className="w-full">
-        <TabsList className="grid h-auto w-full grid-cols-2 rounded-2xl border bg-white p-1.5 shadow-sm sm:w-auto sm:grid-cols-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 rounded-2xl border bg-white p-1.5 shadow-sm sm:w-auto sm:grid-cols-6">
           <TabsTrigger value="payments" className="rounded-xl py-3 text-xs font-bold sm:text-sm">Record Payment</TabsTrigger>
+          <TabsTrigger value="platform" className="rounded-xl py-3 text-xs font-bold sm:text-sm">Platform Fees</TabsTrigger>
           <TabsTrigger value="overview" className="rounded-xl py-3 text-xs font-bold sm:text-sm">Overview</TabsTrigger>
           <TabsTrigger value="registry" className="rounded-xl py-3 text-xs font-bold sm:text-sm">Student Registry</TabsTrigger>
           <TabsTrigger value="allocation" className="rounded-xl py-3 text-xs font-bold sm:text-sm">Class Allocation</TabsTrigger>
@@ -692,6 +694,10 @@ export default function FeesPage() {
 
         <TabsContent value="payments" className="mt-6 space-y-6">
           <BursarPayments />
+        </TabsContent>
+
+        <TabsContent value="platform" className="mt-6 space-y-6">
+          <PlatformFees />
         </TabsContent>
 
         <TabsContent value="overview" className="mt-6 space-y-6">

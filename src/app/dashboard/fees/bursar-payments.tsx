@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { usePagination, DataPagination } from "@/components/ui/data-pagination";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
@@ -108,6 +109,8 @@ export function BursarPayments() {
     (typeof (user as any)?.school === "object" && (user as any)?.school?.name) || platformSettings?.name || "EduIgnite School";
 
   const [studentSearch, setStudentSearch] = useState("");
+  const [studentClassFilter, setStudentClassFilter] = useState("all");
+  const [studentSubSchoolFilter, setStudentSubSchoolFilter] = useState("all");
   const [selectedStudentId, setSelectedStudentId] = useState("");
   // Inline creation of a new fee type — it appears in the selector at once.
   const [newFeeTypeOpen, setNewFeeTypeOpen] = useState(false);
@@ -161,16 +164,32 @@ export function BursarPayments() {
   const feeTypes = feeTypesQuery.data || [];
   const overview = overviewQuery.data;
 
+  const studentClassOf = (s: any) => s.student_class || s.class_name || s.school_class_name || s.className || "";
+  const studentSubSchoolOf = (s: any) => s.sub_school_name || s.subSchoolName || s.section || "General";
+  const studentClassOptions = useMemo(
+    () => Array.from(new Set(students.map(studentClassOf).filter(Boolean))).sort() as string[],
+    [students],
+  );
+  const studentSubSchoolOptions = useMemo(
+    () => Array.from(new Set(students.map(studentSubSchoolOf).filter(Boolean))).sort() as string[],
+    [students],
+  );
+
   const filteredStudents = useMemo(() => {
     const term = studentSearch.trim().toLowerCase();
-    if (!term) return students.slice(0, 40);
-    return students
-      .filter((s: any) =>
+    return students.filter((s: any) => {
+      const matchesSearch = !term ||
         s.name?.toLowerCase().includes(term) ||
         s.matricule?.toLowerCase().includes(term) ||
-        s.email?.toLowerCase().includes(term))
-      .slice(0, 40);
-  }, [students, studentSearch]);
+        s.admission_number?.toLowerCase().includes(term) ||
+        s.email?.toLowerCase().includes(term);
+      const matchesClass = studentClassFilter === "all" || studentClassOf(s) === studentClassFilter;
+      const matchesSub = studentSubSchoolFilter === "all" || studentSubSchoolOf(s) === studentSubSchoolFilter;
+      return matchesSearch && matchesClass && matchesSub;
+    });
+  }, [students, studentSearch, studentClassFilter, studentSubSchoolFilter]);
+
+  const studentPager = usePagination(filteredStudents, 8);
 
   const selectedStudent = useMemo(
     () => students.find((s: any) => String(s.id) === String(selectedStudentId)) || null,
@@ -397,33 +416,61 @@ export function BursarPayments() {
           <CardContent className="space-y-3">
             <div className="flex items-center gap-2 rounded-xl border bg-white px-3">
               <Search className="h-4 w-4 text-muted-foreground" />
-              <Input value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} placeholder="Search by name or matricule..." className="border-none focus-visible:ring-0" />
+              <Input value={studentSearch} onChange={(e) => setStudentSearch(e.target.value)} placeholder="Search by name, matricule or admission no..." className="border-none focus-visible:ring-0" />
             </div>
-            <div className="max-h-[320px] space-y-2 overflow-y-auto pr-1">
-              {studentsQuery.isLoading ? (
-                <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary/40" /></div>
-              ) : filteredStudents.length === 0 ? (
-                <p className="py-8 text-center text-xs text-muted-foreground">No students found.</p>
-              ) : filteredStudents.map((student: any) => (
-                <button
-                  key={student.id}
-                  type="button"
-                  onClick={() => { setSelectedStudentId(String(student.id)); }}
-                  className={cn(
-                    "flex w-full items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all",
-                    String(selectedStudentId) === String(student.id) ? "border-primary bg-primary/5" : "hover:bg-accent/20"
-                  )}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-bold text-primary">{student.name}</p>
-                    <p className="truncate text-[10px] font-mono text-muted-foreground">{student.matricule}</p>
-                  </div>
-                  <Badge className={cn("text-[8px] font-black uppercase", student.is_license_paid ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
-                    {student.is_license_paid ? "Active" : "Platform unpaid"}
-                  </Badge>
-                </button>
-              ))}
+            <div className="grid grid-cols-2 gap-2">
+              <Select value={studentClassFilter} onValueChange={setStudentClassFilter}>
+                <SelectTrigger className="h-10 rounded-xl text-xs"><SelectValue placeholder="Class" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All classes</SelectItem>
+                  {studentClassOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={studentSubSchoolFilter} onValueChange={setStudentSubSchoolFilter}>
+                <SelectTrigger className="h-10 rounded-xl text-xs"><SelectValue placeholder="Sub-school" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All sub-schools</SelectItem>
+                  {studentSubSchoolOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
+            <div className="overflow-hidden rounded-xl border">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-primary text-[10px] font-black uppercase tracking-widest text-white">
+                  <tr>
+                    <th className="px-3 py-2">Student</th>
+                    <th className="px-3 py-2 text-right">Platform</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {studentsQuery.isLoading ? (
+                    <tr><td colSpan={2} className="py-8 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-primary/40" /></td></tr>
+                  ) : studentPager.pageItems.length === 0 ? (
+                    <tr><td colSpan={2} className="py-8 text-center text-xs text-muted-foreground">No students match the filters.</td></tr>
+                  ) : studentPager.pageItems.map((student: any) => (
+                    <tr
+                      key={student.id}
+                      onClick={() => setSelectedStudentId(String(student.id))}
+                      className={cn(
+                        "cursor-pointer border-t transition-colors",
+                        String(selectedStudentId) === String(student.id) ? "bg-primary/5" : "hover:bg-accent/20",
+                      )}
+                    >
+                      <td className="px-3 py-2.5">
+                        <p className="truncate font-bold text-primary">{student.name}</p>
+                        <p className="truncate text-[10px] font-mono text-muted-foreground">{student.matricule} · {studentClassOf(student) || "—"}</p>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <Badge className={cn("text-[8px] font-black uppercase", student.is_license_paid ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
+                          {student.is_license_paid ? "Active" : "Unpaid"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <DataPagination pager={studentPager} label="students" />
           </CardContent>
         </Card>
 

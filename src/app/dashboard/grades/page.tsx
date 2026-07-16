@@ -58,6 +58,7 @@ import { studentsService } from "@/lib/api/services/students.service";
 import { schoolsService } from "@/lib/api/services/schools.service";
 import { useSchoolSettings } from "@/lib/hooks/useSchools";
 import { downloadHtmlDocument, downloadReportCardsPdf, escapeHtml } from "@/lib/browser-download";
+import { buildSequenceLedger } from "@/lib/sequence-ledger";
 import { buildCameroonReportCardDocument, buildCameroonReportCardHtml } from "@/lib/cameroon-report-card";
 import { isNativeApp } from "@/lib/native-download";
 
@@ -1909,8 +1910,9 @@ export default function GradeBookPage() {
         status: score >= 10 ? "Passed" : "Needs Improvement",
       };
     });
-    // Same per-subject ledger the parent account uses, so both tables match.
-    const studentGradeLedger = buildGradeLedger(studentTestGrades);
+    // Same dynamic per-subject ledger the parent account uses: one column for
+    // EVERY sequence that already has marks, regardless of the active term.
+    const studentLedger = buildSequenceLedger(studentTestGrades);
 
     return (
       <div className="space-y-8 pb-20">
@@ -2040,8 +2042,9 @@ export default function GradeBookPage() {
                     <TableRow className="uppercase text-[10px] font-black tracking-widest border-b">
                       <TableHead className="pl-8 py-4">Subject</TableHead>
                       <TableHead className="text-center">Coefficient</TableHead>
-                      <TableHead className="text-center bg-primary/5">Seq 1</TableHead>
-                      <TableHead className="text-center bg-primary/5">Seq 2</TableHead>
+                      {studentLedger.columns.map((col) => (
+                        <TableHead key={col.id} className="text-center bg-primary/5">{col.label}</TableHead>
+                      ))}
                       <TableHead className="text-center">Average</TableHead>
                       <TableHead className="text-right pr-8">Status</TableHead>
                     </TableRow>
@@ -2049,18 +2052,21 @@ export default function GradeBookPage() {
                   <TableBody>
                     {isStudentTestLoading ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                        <TableCell colSpan={4 + studentLedger.columns.length} className="py-10 text-center text-muted-foreground">
                           <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
                           Loading saved marks...
                         </TableCell>
                       </TableRow>
-                    ) : studentGradeLedger.length > 0 ? (
-                      studentGradeLedger.map((g: any, idx: number) => (
+                    ) : studentLedger.rows.length > 0 ? (
+                      studentLedger.rows.map((g, idx: number) => (
                         <TableRow key={idx} className="h-16 border-b last:border-0 hover:bg-accent/5 transition-colors">
                           <TableCell className="pl-8 font-black uppercase text-xs text-primary">{g.subject}</TableCell>
                           <TableCell className="text-center font-mono font-bold">{g.coef}</TableCell>
-                          <TableCell className="text-center font-black text-primary bg-primary/5">{g.seq1.toFixed(2)}</TableCell>
-                          <TableCell className="text-center font-black text-primary bg-primary/5">{g.seq2.toFixed(2)}</TableCell>
+                          {studentLedger.columns.map((col) => (
+                            <TableCell key={col.id} className="text-center font-black text-primary bg-primary/5">
+                              {g.scores[col.id] !== null && g.scores[col.id] !== undefined ? Number(g.scores[col.id]).toFixed(2) : "—"}
+                            </TableCell>
+                          ))}
                           <TableCell className="text-center font-black text-secondary">{g.average.toFixed(2)}</TableCell>
                           <TableCell className="text-right pr-8">
                             <Badge className={cn(
@@ -2074,8 +2080,8 @@ export default function GradeBookPage() {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
-                          No published grades are available for you yet.
+                        <TableCell colSpan={4 + studentLedger.columns.length} className="py-10 text-center text-sm text-muted-foreground">
+                          Your teachers have not saved any marks yet.
                         </TableCell>
                       </TableRow>
                     )}

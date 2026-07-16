@@ -68,8 +68,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import Link from "next/link";
 import { attendanceService } from "@/lib/api/services/attendance.service";
 import { resolveMediaUrl } from "@/lib/media";
-import { downloadHtmlDocument, escapeHtml } from "@/lib/browser-download";
+import { downloadHtmlDocument, downloadReportCardsPdf, downloadHtmlPagesPdf, downloadElementPdf, escapeHtml } from "@/lib/browser-download";
+import { buildHonourRollCertificateHtml } from "@/lib/honour-roll-certificate";
 import { buildCameroonReportCardDocument, buildCameroonReportCardHtml } from "@/lib/cameroon-report-card";
+import { buildSequenceLedger } from "@/lib/sequence-ledger";
 import { StudentIdCard } from "@/components/student-id-card";
 
 const CLASSES = ["6ème / Form 1", "5ème / Form 2", "4ème / Form 3", "3ème / Form 4", "2nde / Form 5", "1ère / Lower Sixth", "Terminale / Upper Sixth"];
@@ -238,6 +240,9 @@ export default function StudentDetailsPage() {
   const rawStudent = studentData || fallbackChild;
 
   const gradeList = useMemo(() => buildGradeLedger(gradesData?.results || []), [gradesData?.results]);
+  // Dynamic follow-up ledger: one column per sequence that already has marks,
+  // regardless of the active term — identical to the student's own table.
+  const sequenceLedger = useMemo(() => buildSequenceLedger(gradesData?.results || []), [gradesData?.results]);
   const transcriptRows = useMemo(() => buildTranscriptRows(gradesData?.results || []), [gradesData?.results]);
 
   const student = useMemo(() => {
@@ -327,9 +332,12 @@ export default function StudentDetailsPage() {
           ? "certificate"
           : "report";
 
+    const safeName = `${student.name || "student"}_${title}`.replace(/\s+/g, "_").toLowerCase();
+
     if (type === "report") {
-      // Prefer the official published report card (same data + working QR as the
-      // admin/student) and only fall back to the local rebuild if it is missing.
+      // The report card is only available to the family once the school admin
+      // has published it: use the official published card (same data + QR as the
+      // admin/student). If it is missing, publication has not happened yet.
       let cardData = officialReportCard;
       if (!cardData && studentId && reportSequenceId) {
         try {
@@ -342,26 +350,43 @@ export default function StudentDetailsPage() {
         toast({ variant: "destructive", title: "Report card unavailable", description: officialReportError || "This report card has not been published by the school admin yet." });
         return;
       }
-      const html = buildCameroonReportCardDocument(cardData, {
-        title,
-        school: student.school,
-        student,
-        attendance: student.attendanceSummary,
-      });
-      downloadHtmlDocument(html, `${title.replace(/\s+/g, "_").toLowerCase()}.html`);
-      toast({ title: "Download ready", description: `${title} has been exported as a PDF report card.` });
+      // Pixel-exact PDF — identical to the on-screen official report card.
+      await downloadReportCardsPdf(
+        [buildCameroonReportCardHtml(cardData, { title, school: student.school, student, attendance: student.attendanceSummary })],
+        safeName,
+      );
+      toast({ title: "Download ready", description: `${title} has been saved as a PDF, exactly as shown.` });
       return;
     }
 
-    const html = buildStudentDocumentHtml({
-      title,
-      student,
-      platform: platformSettings,
-      type,
-    });
+    if (type === "id") {
+      // Capture the very ID card on screen, so the download is identical.
+      const el = document.getElementById("parent-id-card-print");
+      if (!el) {
+        toast({ variant: "destructive", title: "Card unavailable", description: "Open the ID card preview first." });
+        return;
+      }
+      await downloadElementPdf(el, safeName, { landscape: true });
+      toast({ title: "Download ready", description: `${title} has been saved as a PDF, exactly as shown.` });
+      return;
+    }
 
-    downloadHtmlDocument(html, `${title.replace(/\s+/g, "_").toLowerCase()}.html`);
-    toast({ title: "Download ready", description: `${title} has been exported for printing or PDF save.` });
+    // Honour Roll Certificate — the shared official design, landscape.
+    await downloadHtmlPagesPdf(
+      [buildHonourRollCertificateHtml(
+        {
+          name: student.name,
+          class_name: student.class,
+          academic_year: (student as any).academicYear || (student.school as any)?.academic_year || "",
+          average: (student as any).annualAvg,
+          principal: (student.school as any)?.principal,
+        },
+        student.school,
+      )],
+      safeName,
+      { landscape: true },
+    );
+    toast({ title: "Download ready", description: `${title} has been saved as a PDF, exactly as shown.` });
   };
 
   if (loading) return (
@@ -493,20 +518,24 @@ export default function StudentDetailsPage() {
                   <TableRow className="uppercase text-[10px] font-black tracking-widest border-b">
                     <TableHead className="pl-8 py-4">Subject</TableHead>
                     <TableHead className="text-center">Coefficient</TableHead>
-                    <TableHead className="text-center bg-primary/5">Seq 1</TableHead>
-                    <TableHead className="text-center bg-primary/5">Seq 2</TableHead>
+                    {sequenceLedger.columns.map((col) => (
+                      <TableHead key={col.id} className="text-center bg-primary/5">{col.label}</TableHead>
+                    ))}
                     <TableHead className="text-center">Average</TableHead>
                     <TableHead className="text-right pr-8">Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {gradeList.length > 0 ? (
-                    gradeList.map((g: any, idx: number) => (
+                  {sequenceLedger.rows.length > 0 ? (
+                    sequenceLedger.rows.map((g, idx: number) => (
                       <TableRow key={idx} className="h-16 border-b last:border-0 hover:bg-accent/5 transition-colors">
                         <TableCell className="pl-8 font-black uppercase text-xs text-primary">{g.subject}</TableCell>
                         <TableCell className="text-center font-mono font-bold">{g.coef}</TableCell>
-                        <TableCell className="text-center font-black text-primary bg-primary/5">{g.seq1.toFixed(2)}</TableCell>
-                        <TableCell className="text-center font-black text-primary bg-primary/5">{g.seq2.toFixed(2)}</TableCell>
+                        {sequenceLedger.columns.map((col) => (
+                          <TableCell key={col.id} className="text-center font-black text-primary bg-primary/5">
+                            {g.scores[col.id] !== null && g.scores[col.id] !== undefined ? Number(g.scores[col.id]).toFixed(2) : "—"}
+                          </TableCell>
+                        ))}
                         <TableCell className="text-center font-black text-secondary">{g.average.toFixed(2)}</TableCell>
                         <TableCell className="text-right pr-8">
                           <Badge className={cn(
@@ -520,8 +549,8 @@ export default function StudentDetailsPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
-                        No published grades are available for this student yet.
+                      <TableCell colSpan={4 + sequenceLedger.columns.length} className="py-10 text-center text-sm text-muted-foreground">
+                        No marks have been saved for this student yet.
                       </TableCell>
                     </TableRow>
                   )}
@@ -692,10 +721,16 @@ export default function StudentDetailsPage() {
                   {officialReportError || "Loading the official report card..."}
                 </div>
               )
+            ) : !((rawStudent as any)?.qr_code) ? (
+              // The identity card is only available once the school has issued it
+              // (a verification code has been generated for the student).
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center text-sm font-semibold text-amber-800">
+                This student&apos;s identity card has not been issued by the school yet.
+              </div>
             ) : (
               // Same official ID card component the school admin uses — identical
               // design, data and a working verification QR.
-              <div className="flex justify-center">
+              <div id="parent-id-card-print" className="flex justify-center">
                 <StudentIdCard
                   student={{
                     name: student.name,

@@ -319,6 +319,35 @@ export async function downloadHtmlPagesPdf(
   savePdfNativeAware(doc, pdfFilename(filename));
 }
 
+/**
+ * Capture an already-rendered on-screen element (e.g. a live ID card) into a
+ * PDF that looks exactly like what is displayed — used when the document is a
+ * React component rather than an HTML string.
+ */
+export async function downloadElementPdf(
+  element: HTMLElement | null,
+  filename: string,
+  options: { landscape?: boolean } = {},
+) {
+  if (!element) return;
+  const { default: jsPDF } = await import("jspdf");
+  const html2canvas = (await import("html2canvas")).default;
+  const canvas = await html2canvas(element, { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false });
+  const img = canvas.toDataURL("image/jpeg", 0.95);
+  const doc = new jsPDF({ orientation: options.landscape ? "landscape" : "portrait", unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 12;
+  let w = pageW - margin * 2;
+  let h = (canvas.height * w) / canvas.width;
+  if (h > pageH - margin * 2) {
+    h = pageH - margin * 2;
+    w = (canvas.width * h) / canvas.height;
+  }
+  doc.addImage(img, "JPEG", (pageW - w) / 2, (pageH - h) / 2, w, h);
+  savePdfNativeAware(doc, pdfFilename(filename));
+}
+
 export function escapeHtml(value: string | number | null | undefined) {
   return `${value ?? ""}`
     .replace(/&/g, "&amp;")

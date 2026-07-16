@@ -464,8 +464,8 @@ export default function AcademicRewardsPage() {
 
     if (title === "Honour Roll Registry") {
       const body = buildHonourRollRegistryHtml(eligibleStudents, user?.school, threshold, periodLabel, rewardData?.summary);
-      downloadHtmlDocument(printableDocument(title, body), `school-honour-roll-registry.html`);
-      toast({ title: "Registry prepared", description: `${user?.school?.name || "The school"} honour-roll registry has been downloaded.` });
+      void downloadHtmlPagesPdf([printableDocument(title, body)], `school-honour-roll-registry`);
+      toast({ title: "Registry downloaded", description: `${user?.school?.name || "The school"} honour-roll registry has been saved as a styled PDF.` });
       return;
     }
 
@@ -475,9 +475,9 @@ export default function AcademicRewardsPage() {
         : "honour-roll-print";
     const element = document.getElementById(targetId);
     if (element) {
-      const documentHtml = printableDocument(title, element.outerHTML);
-      downloadHtmlDocument(documentHtml, `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.html`);
-      toast({ title: "Document prepared", description: `${title} has been downloaded for printing or PDF export.` });
+      const landscape = targetId === "honour-roll-print";
+      void downloadHtmlPagesPdf([printableDocument(title, element.outerHTML)], `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, { landscape });
+      toast({ title: "Document downloaded", description: `${title} has been saved as a styled PDF.` });
       return;
     }
 
@@ -485,8 +485,8 @@ export default function AcademicRewardsPage() {
       title,
       buildHonourRollRegistryHtml(eligibleStudents, user?.school, threshold, periodLabel, rewardData?.summary)
     );
-    downloadHtmlDocument(summaryHtml, `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.html`);
-    toast({ title: "Document prepared", description: `${title} has been downloaded for printing or PDF export.` });
+    void downloadHtmlPagesPdf([summaryHtml], `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`);
+    toast({ title: "Document downloaded", description: `${title} has been saved as a styled PDF.` });
   };
 
   // --- STAFF VIEW (PROFESSIONAL RECOGNITION) ---

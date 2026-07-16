@@ -15,6 +15,7 @@ import { usePagination, DataPagination } from "@/components/ui/data-pagination";
 import { Search, Smartphone, Loader2, CheckCircle2, ShieldCheck, Wallet, Users, Download, Printer } from "lucide-react";
 import { usersService } from "@/lib/api/services/users.service";
 import { feesService } from "@/lib/api/services/fees.service";
+import { usePlatformFees } from "@/lib/hooks/usePlatform";
 import { useHierarchyClasses } from "@/lib/hooks/useSchools";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import { useToast } from "@/hooks/use-toast";
@@ -48,8 +49,17 @@ export function Subscription() {
   const schoolId = (typeof (user as any)?.school === "object" ? (user as any)?.school?.id : (user as any)?.school) || (user as any)?.school_id || "";
   const schoolName = (typeof (user as any)?.school === "object" && (user as any)?.school?.name) || platformSettings?.name || "EduIgnite School";
 
+  // The authoritative subscription amount is set by the founders and returned by
+  // /platform/fees/. Fall back to whatever the cached platform settings carry so
+  // the figure (e.g. 500) is always shown instead of "Set by EduIgnite".
+  const platformFeesQuery = usePlatformFees();
   const platformFees = (platformSettings?.fees ?? {}) as Record<string, string | number>;
-  const platformFeeAmount = Number(platformFees.STUDENT ?? platformFees.student ?? 0);
+  const studentFeeFromApi = Number(
+    normalizeList(platformFeesQuery.data).find((f: any) => String(f.role).toUpperCase() === "STUDENT")?.amount ?? 0,
+  );
+  const platformFeeAmount = studentFeeFromApi > 0
+    ? studentFeeFromApi
+    : Number(platformFees.STUDENT ?? platformFees.student ?? 0);
 
   const [search, setSearch] = useState("");
   const [classFilter, setClassFilter] = useState(ALL);
@@ -230,7 +240,7 @@ export function Subscription() {
           </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4 p-8 pt-2 sm:grid-cols-4">
-          <div className="rounded-2xl bg-white/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Subscription</p><p className="mt-2 text-xl font-black">{platformFeeAmount > 0 ? money(platformFeeAmount) : "Set by EduIgnite"}</p></div>
+          <div className="rounded-2xl bg-white/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Subscription</p><p className="mt-2 text-xl font-black">{platformFeeAmount > 0 ? money(platformFeeAmount) : "Not set"}</p></div>
           <div className="rounded-2xl bg-white/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Total Students</p><p className="mt-2 text-xl font-black">{students.length}</p></div>
           <div className="rounded-2xl bg-white/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Paid</p><p className="mt-2 text-xl font-black text-green-300">{paidCount}</p></div>
           <div className="rounded-2xl bg-white/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Not Yet Paid</p><p className="mt-2 text-xl font-black text-amber-300">{unpaidCount}</p></div>
@@ -359,7 +369,7 @@ export function Subscription() {
           <div className="space-y-4">
             <div className="rounded-2xl border bg-accent/10 p-4 text-center">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Amount to pay</p>
-              <p className="mt-1 text-2xl font-black text-primary">{platformFeeAmount > 0 ? money(platformFeeAmount) : "Set by EduIgnite"}</p>
+              <p className="mt-1 text-2xl font-black text-primary">{platformFeeAmount > 0 ? money(platformFeeAmount) : "Not set"}</p>
             </div>
             <div className="space-y-2">
               <Label>Mobile Money</Label>

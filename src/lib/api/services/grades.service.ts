@@ -895,6 +895,32 @@ export const gradesService = {
     throw lastError;
   },
 
+  // Publish every class in the school for a sequence or term in one action.
+  async publishAllReportCards(payload: {
+    scope: "SEQUENCE" | "TERM";
+    sequence_id?: string;
+    term?: number;
+    academic_year?: string;
+  }): Promise<any> {
+    const endpoints = [
+      API.GRADES.PUBLISH_ALL_REPORT_CARDS_SHORT_ACTION,
+      API.GRADES.PUBLISH_ALL_REPORT_CARDS_SHORT,
+      API.GRADES.PUBLISH_ALL_REPORT_CARDS_ACTION,
+      API.GRADES.PUBLISH_ALL_REPORT_CARDS,
+    ];
+    let lastError: unknown = null;
+    for (const endpoint of endpoints) {
+      try {
+        const { data } = await apiClient.post(endpoint, payload);
+        return data;
+      } catch (error) {
+        lastError = error;
+        if (!shouldFallbackToSequenceUpsert(error)) throw error;
+      }
+    }
+    throw lastError;
+  },
+
   async getHonourRoll(params?: ListParams): Promise<any> {
     const endpoints = [
       API.GRADES.HONOUR_ROLL,

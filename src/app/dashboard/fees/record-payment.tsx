@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { usePagination, DataPagination } from "@/components/ui/data-pagination";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { feesService } from "@/lib/api/services/fees.service";
 import { usersService } from "@/lib/api/services/users.service";
@@ -28,6 +29,8 @@ const ALL = "all";
 const METHODS = [
   { value: "mtn_momo", label: "MTN Mobile Money" },
   { value: "orange_money", label: "Orange Money" },
+  { value: "cash", label: "Cash" },
+  { value: "bank_transfer", label: "Bank Transfer" },
 ];
 
 const normalizeList = (payload: any): any[] =>
@@ -39,12 +42,13 @@ const subSchoolOf = (s: any) => s.sub_school_name || s.subSchoolName || s.sectio
  * Record Payment tab — once a student's subscription is paid, the bursar / school
  * admin records a fee. Pick sub-school and class, choose the student, pick a fee
  * type (its amount is shown), and Record. A fee cannot be recorded for a student
- * whose subscription is unpaid.
+ * whose subscription is unpaid. On phones the record form opens as a pop-up.
  */
 export function RecordPayment() {
   const { user, platformSettings } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const schoolId = (typeof (user as any)?.school === "object" ? (user as any)?.school?.id : (user as any)?.school) || (user as any)?.school_id || "";
   const schoolName = (typeof (user as any)?.school === "object" && (user as any)?.school?.name) || platformSettings?.name || "EduIgnite School";
 
@@ -52,6 +56,7 @@ export function RecordPayment() {
   const [subSchoolFilter, setSubSchoolFilter] = useState(ALL);
   const [classFilter, setClassFilter] = useState(ALL);
   const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [recordDialogOpen, setRecordDialogOpen] = useState(false);
 
   const [feeId, setFeeId] = useState("");
   const [method, setMethod] = useState("mtn_momo");
@@ -90,6 +95,12 @@ export function RecordPayment() {
   const platformPaid = Boolean(selectedStudent?.is_license_paid);
   const selectedFee = useMemo(() => feeTypes.find((f: any) => String(f.id) === String(feeId)) || null, [feeTypes, feeId]);
 
+  const selectStudent = (id: string) => {
+    setSelectedStudentId(id);
+    setFeeId("");
+    if (isMobile) setRecordDialogOpen(true);
+  };
+
   const recordFee = useMutation({
     mutationFn: async () => {
       if (!selectedStudent) throw new Error("Select a student first.");
@@ -113,12 +124,75 @@ export function RecordPayment() {
       queryClient.invalidateQueries({ queryKey: ["record-payment-students"] });
       setReceipt(receiptFromPayment(data, "Fee Payment"));
       setFeeId(""); setNotes("");
+      setRecordDialogOpen(false);
       toast({ title: "Fee recorded", description: "The receipt is ready to print or download." });
     },
     onError: (error: any) => toast({ variant: "destructive", title: "Could not record fee", description: getApiErrorMessage(error, error?.message || "Please try again.") }),
   });
 
   const receiptHtml = receipt ? buildFeeReceiptHtml(receipt, schoolName) : "";
+
+  const renderRecordBody = () => {
+    if (!selectedStudent) {
+      return <p className="py-10 text-center text-sm text-muted-foreground">No student selected yet.</p>;
+    }
+    if (!platformPaid) {
+      return (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+          <span>{selectedStudent.name}'s subscription is not paid. Pay it in the <b>Subscription</b> tab before recording any fee.</span>
+        </div>
+      );
+    }
+    return (
+      <>
+        <div className="space-y-2">
+          <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fee Type</Label>
+          {feeTypes.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No fee types yet. Add them in the Fee Type tab.</p>
+          ) : (
+            <Select value={feeId} onValueChange={setFeeId}>
+              <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Choose a fee type" /></SelectTrigger>
+              <SelectContent>
+                {feeTypes.map((fee: any) => (
+                  <SelectItem key={fee.id} value={String(fee.id)}>{fee.name} — {money(fee.amount, fee.currency || "XAF")}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        {selectedFee ? (
+          <div className="flex items-center justify-between rounded-2xl border bg-accent/10 p-4">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fee Amount</span>
+            <span className="text-xl font-black text-primary">{money(selectedFee.amount, selectedFee.currency || "XAF")}</span>
+          </div>
+        ) : null}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Method</Label>
+            <Select value={method} onValueChange={setMethod}>
+              <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
+              <SelectContent>{METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Payment Date</Label>
+            <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="h-10 rounded-xl" />
+          </div>
+          <div className="space-y-1 sm:col-span-2">
+            <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notes (optional)</Label>
+            <Input value={notes} onChange={(e) => setNotes(e.target.value)} className="h-10 rounded-xl" placeholder="e.g. First instalment" />
+          </div>
+        </div>
+
+        <Button onClick={() => recordFee.mutate()} disabled={!feeId || recordFee.isPending} className="h-12 w-full gap-2 rounded-xl font-black">
+          {recordFee.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ReceiptText className="h-4 w-4" />} Record &amp; Generate Receipt
+        </Button>
+      </>
+    );
+  };
 
   return (
     <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
@@ -160,7 +234,7 @@ export function RecordPayment() {
                 ) : pager.pageItems.length === 0 ? (
                   <tr><td colSpan={2} className="py-8 text-center text-xs text-muted-foreground">No students match the filters.</td></tr>
                 ) : pager.pageItems.map((student: any) => (
-                  <tr key={student.id} onClick={() => setSelectedStudentId(String(student.id))}
+                  <tr key={student.id} onClick={() => selectStudent(String(student.id))}
                     className={cn("cursor-pointer border-t transition-colors", String(selectedStudentId) === String(student.id) ? "bg-primary/5" : "hover:bg-accent/20")}>
                     <td className="px-3 py-2.5">
                       <p className="truncate font-bold text-primary">{student.name}</p>
@@ -178,70 +252,27 @@ export function RecordPayment() {
         </CardContent>
       </Card>
 
-      {/* Record panel */}
-      <Card className="border-none shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base font-black text-primary"><CreditCard className="h-5 w-5 text-secondary" /> Record Fee</CardTitle>
-          <CardDescription>{selectedStudent ? `Recording for ${selectedStudent.name}` : "Select a student to begin."}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          {!selectedStudent ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">No student selected yet.</p>
-          ) : !platformPaid ? (
-            <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
-              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-              <span>{selectedStudent.name}'s subscription is not paid. Pay it in the <b>Subscription</b> tab before recording any fee.</span>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-2">
-                <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fee Type</Label>
-                {feeTypes.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No fee types yet. Add them in the Fee Type tab.</p>
-                ) : (
-                  <Select value={feeId} onValueChange={setFeeId}>
-                    <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Choose a fee type" /></SelectTrigger>
-                    <SelectContent>
-                      {feeTypes.map((fee: any) => (
-                        <SelectItem key={fee.id} value={String(fee.id)}>{fee.name} — {money(fee.amount, fee.currency || "XAF")}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
+      {/* Record panel — inline on desktop/tablet, pop-up on phones */}
+      {!isMobile ? (
+        <Card className="border-none shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base font-black text-primary"><CreditCard className="h-5 w-5 text-secondary" /> Record Fee</CardTitle>
+            <CardDescription>{selectedStudent ? `Recording for ${selectedStudent.name}` : "Select a student to begin."}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">{renderRecordBody()}</CardContent>
+        </Card>
+      ) : null}
 
-              {selectedFee ? (
-                <div className="flex items-center justify-between rounded-2xl border bg-accent/10 p-4">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fee Amount</span>
-                  <span className="text-xl font-black text-primary">{money(selectedFee.amount, selectedFee.currency || "XAF")}</span>
-                </div>
-              ) : null}
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Method</Label>
-                  <Select value={method} onValueChange={setMethod}>
-                    <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
-                    <SelectContent>{METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Payment Date</Label>
-                  <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} className="h-10 rounded-xl" />
-                </div>
-                <div className="space-y-1 sm:col-span-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Notes (optional)</Label>
-                  <Input value={notes} onChange={(e) => setNotes(e.target.value)} className="h-10 rounded-xl" placeholder="e.g. First instalment" />
-                </div>
-              </div>
-
-              <Button onClick={() => recordFee.mutate()} disabled={!feeId || recordFee.isPending} className="h-12 w-full gap-2 rounded-xl font-black">
-                {recordFee.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ReceiptText className="h-4 w-4" />} Record &amp; Generate Receipt
-              </Button>
-            </>
-          )}
-        </CardContent>
-      </Card>
+      {/* Mobile record pop-up */}
+      <Dialog open={isMobile && recordDialogOpen} onOpenChange={(open) => { if (!open) setRecordDialogOpen(false); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-primary"><CreditCard className="h-5 w-5 text-secondary" /> Record Fee</DialogTitle>
+            <DialogDescription>{selectedStudent ? `Recording for ${selectedStudent.name}` : "Select a student to begin."}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5">{renderRecordBody()}</div>
+        </DialogContent>
+      </Dialog>
 
       {/* Receipt dialog */}
       <Dialog open={!!receipt} onOpenChange={(open) => { if (!open) setReceipt(null); }}>

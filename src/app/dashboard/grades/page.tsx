@@ -319,6 +319,8 @@ export default function GradeBookPage() {
   const [isAdminReportLoading, setIsAdminReportLoading] = useState(false);
   const [isGeneratingClassReports, setIsGeneratingClassReports] = useState(false);
   const [isPublishingReportCards, setIsPublishingReportCards] = useState(false);
+  const [isPublishingAllSchool, setIsPublishingAllSchool] = useState(false);
+  const [publishAllOpen, setPublishAllOpen] = useState(false);
   const [adminReportScope, setAdminReportScope] = useState<"sequence" | "term">("sequence");
   const [selectedAdminTerm, setSelectedAdminTerm] = useState("");
   const [selectedAdminAcademicYear, setSelectedAdminAcademicYear] = useState("");
@@ -1258,6 +1260,39 @@ export default function GradeBookPage() {
     }
   };
 
+  const handlePublishAllSchool = async () => {
+    const canPublish = adminReportScope === "term"
+      ? Boolean(selectedAdminTerm && selectedAdminAcademicYear)
+      : Boolean(selectedSequence);
+    if (!canPublish) {
+      toast({ variant: "destructive", title: "Choose a period", description: "Pick the sequence or term to publish for the whole school." });
+      return;
+    }
+    setIsPublishingAllSchool(true);
+    try {
+      const result = await gradesService.publishAllReportCards({
+        scope: adminReportScope === "term" ? "TERM" : "SEQUENCE",
+        sequence_id: adminReportScope === "sequence" ? selectedSequence : undefined,
+        term: adminReportScope === "term" ? Number(selectedAdminTerm) : undefined,
+        academic_year: adminReportScope === "term" ? selectedAdminAcademicYear : undefined,
+      });
+      toast({
+        title: "Report cards published",
+        description: result?.message || "All eligible class report cards are now published for students and parents.",
+      });
+      setPublishAllOpen(false);
+      setReloadNonce((current) => current + 1);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Publish failed",
+        description: extractApiErrorMessage(error?.response?.data) || error?.message || "The report cards could not be published.",
+      });
+    } finally {
+      setIsPublishingAllSchool(false);
+    }
+  };
+
   const getSystemStatus = (average: number) => {
     return average >= 10 ? "PASSED" : "FAILED";
   };
@@ -1729,10 +1764,96 @@ export default function GradeBookPage() {
             <h1 className="text-3xl font-bold text-primary font-headline uppercase tracking-tighter">Academic Governance</h1>
             <p className="text-muted-foreground mt-1 text-sm">Audit class-level report cards and pedagogical performance.</p>
           </div>
-          <Button variant="outline" className="rounded-xl h-11 px-6 font-bold bg-white" onClick={() => handleDownload("Global Performance Audit")}>
-            <FileDown className="w-4 h-4 mr-2" /> Global Audit
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              className="rounded-xl h-11 px-6 font-bold gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
+              onClick={() => setPublishAllOpen(true)}
+            >
+              <ShieldCheck className="w-4 h-4" /> Publish Entire School
+            </Button>
+            <Button variant="outline" className="rounded-xl h-11 px-6 font-bold bg-white" onClick={() => handleDownload("Global Performance Audit")}>
+              <FileDown className="w-4 h-4 mr-2" /> Global Audit
+            </Button>
+          </div>
         </div>
+
+        <Dialog open={publishAllOpen} onOpenChange={(open) => { if (!isPublishingAllSchool) setPublishAllOpen(open); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-primary">
+                <ShieldCheck className="h-5 w-5 text-emerald-600" /> Publish Entire School
+              </DialogTitle>
+              <DialogDescription>
+                Publish report cards for every class in the school at once. Choose the period below; classes with no marks yet are skipped automatically.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-1">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Report Type</label>
+                <Select value={adminReportScope} onValueChange={(value: "sequence" | "term") => setAdminReportScope(value)}>
+                  <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Report type" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sequence">Sequence Report</SelectItem>
+                    <SelectItem value="term">Term Report</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {adminReportScope === "sequence" ? (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Sequence</label>
+                  <Select
+                    value={selectedSequence}
+                    onValueChange={(value) => {
+                      setSelectedSequence(value);
+                      const sequence = sequences.find((item: any) => item.id === value);
+                      if (sequence) {
+                        setSelectedAdminTerm(String(sequence.term || ""));
+                        setSelectedAdminAcademicYear(String(sequence.academic_year || ""));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Choose sequence" /></SelectTrigger>
+                    <SelectContent>
+                      {sequences.map((sequence: any) => (
+                        <SelectItem key={sequence.id} value={sequence.id}>{formatSequenceLabel(sequence)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Term</label>
+                  <Select
+                    value={selectedAdminTermValue}
+                    onValueChange={(value) => {
+                      const [term, academicYear] = value.split("|");
+                      setSelectedAdminTerm(term);
+                      setSelectedAdminAcademicYear(academicYear);
+                    }}
+                  >
+                    <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Choose term" /></SelectTrigger>
+                    <SelectContent>
+                      {adminTermOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label} ({option.sequenceCount} seq.)</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPublishAllOpen(false)} disabled={isPublishingAllSchool}>Cancel</Button>
+              <Button
+                className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
+                onClick={handlePublishAllSchool}
+                disabled={isPublishingAllSchool || (adminReportScope === "sequence" ? !selectedSequence : !selectedAdminTermValue)}
+              >
+                {isPublishingAllSchool ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                Publish All
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Card className="border-none shadow-sm bg-white">
           <CardHeader className="pb-3">

@@ -184,6 +184,7 @@ export const API = {
   FEES: {
     STRUCTURES: '/fees/fee-structures/',
     STRUCTURE_DETAIL: (id: string) => `/fees/fee-structures/${id}/`,
+    MY_FEES: '/fees/fee-structures/my-fees/',
     PAYMENTS: '/fees/payments/',
     PAYMENT_DETAIL: (id: string) => `/fees/payments/${id}/`,
     MY_PAYMENTS: '/fees/payments/my_payments/',

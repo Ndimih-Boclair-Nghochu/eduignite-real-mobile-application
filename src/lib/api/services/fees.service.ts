@@ -20,6 +20,13 @@ export const feesService = {
     return data;
   },
 
+  // Fee types applicable to the signed-in student, or a parent's children.
+  // Returns a flat array of fee items (see backend my_fees).
+  async getMyFees(): Promise<any[]> {
+    const { data } = await apiClient.get(API.FEES.MY_FEES);
+    return Array.isArray(data) ? data : (data?.results ?? []);
+  },
+
   async createFeeStructure(feeData: Partial<FeeStructure>): Promise<FeeStructure> {
     const { data } = await apiClient.post(API.FEES.STRUCTURES, feeData);
     return data;

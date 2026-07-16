@@ -42,7 +42,6 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { fileToDataUrl, getApiErrorMessage } from "@/lib/api/errors";
 import { SchoolHierarchyManager } from "@/components/dashboard/school-hierarchy-manager";
-import { CommunityPeople } from "@/components/dashboard/community-people";
 import { normalizeList } from "@/lib/dashboard-adapters";
 import { MediaRenderer } from "@/components/shared/MediaRenderer";
 

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { generateBrandedTablePdf, generateReportCardsPdf } from "@/lib/pdf-branded";
+import { generateBrandedTablePdf } from "@/lib/pdf-branded";
 import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -57,7 +57,7 @@ import { gradesService } from "@/lib/api/services/grades.service";
 import { studentsService } from "@/lib/api/services/students.service";
 import { schoolsService } from "@/lib/api/services/schools.service";
 import { useSchoolSettings } from "@/lib/hooks/useSchools";
-import { downloadHtmlDocument, escapeHtml } from "@/lib/browser-download";
+import { downloadHtmlDocument, downloadReportCardsPdf, escapeHtml } from "@/lib/browser-download";
 import { buildCameroonReportCardDocument, buildCameroonReportCardHtml } from "@/lib/cameroon-report-card";
 import { isNativeApp } from "@/lib/native-download";
 
@@ -1113,12 +1113,10 @@ export default function GradeBookPage() {
     if (isStudent && reportCard) {
       setIsGeneratingReportPdf(true);
       try {
-        const html = buildCameroonReportCardDocument(reportCard, {
-          title,
-          school: user?.school,
-          student: studentProfile,
-        });
-        downloadHtmlDocument(html, `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.html`);
+        await downloadReportCardsPdf(
+          [buildCameroonReportCardHtml(reportCard, { title, school: user?.school, student: studentProfile })],
+          `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+        );
         toast({ title: "Report card downloaded", description: `${title} was generated with the official Cameroon report-card design.` });
       } catch (error) {
         toast({
@@ -1208,11 +1206,10 @@ export default function GradeBookPage() {
         : sequences.find((sequence: any) => sequence.id === selectedSequence)?.name || "Sequence";
       // One report card per page (fit-to-page, ordered, no page numbers) so each
       // student's card can be printed individually from the same document.
-      generateReportCardsPdf(validCards, {
-        schoolName: user?.school?.name || "EduIgnite",
-        title: `${className} ${reportLabel} Report Card`,
-        fileName: `${className.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${adminReportScope}-report-cards`,
-      });
+      await downloadReportCardsPdf(
+        validCards.map((card) => buildCameroonReportCardHtml(card, { title: `${className} ${reportLabel} Report Card`, school: user?.school })),
+        `${className.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${adminReportScope}-report-cards`,
+      );
       toast({ title: "Report cards generated", description: `${validCards.length} report cards were prepared — one per page for individual printing.` });
     } catch (error: any) {
       toast({
@@ -1710,8 +1707,7 @@ export default function GradeBookPage() {
                     <Button
                       className="gap-2 rounded-xl"
                       onClick={() => {
-                        const html = buildCameroonReportCardDocument(adminReportCard, { title: "Report Card", school: user?.school });
-                        downloadHtmlDocument(html, `${(adminReportCard.student?.name || "student").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-report-card.html`);
+                        void downloadReportCardsPdf([buildCameroonReportCardHtml(adminReportCard, { title: "Report Card", school: user?.school })], `${(adminReportCard.student?.name || "student").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-report-card`);
                       }}
                     >
                       <Download className="h-4 w-4" /> Download

@@ -241,7 +241,7 @@ export function buildCameroonReportCardHtml(report: any, options: ReportCardBuil
       .rc-head{display:grid;grid-template-columns:1fr 120px 1fr;gap:8px;align-items:start;text-align:center}
       .rc-head .side{font-size:10px;line-height:1.5;color:#1f2937}
       .rc-head .side b{display:block;font-size:11px;color:${NAVY};letter-spacing:.3px}
-      .rc-logo{width:78px;height:78px;border-radius:50%;border:2px solid ${NAVY};margin:0 auto;display:flex;align-items:center;justify-content:center;overflow:hidden;color:${NAVY};font-weight:800;font-size:11px}
+      .rc-logo{width:78px;height:78px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;overflow:hidden;color:${NAVY};font-weight:800;font-size:11px}
       .rc-logo img{width:100%;height:100%;object-fit:contain}
       .rc-school{text-align:center;font-weight:800;font-size:16px;color:#111827;margin:10px 0 2px;letter-spacing:.3px}
       .rc-year{text-align:center;font-size:11px;font-weight:700;color:#374151;margin-bottom:8px}

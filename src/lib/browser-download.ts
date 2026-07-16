@@ -193,6 +193,64 @@ export async function downloadHtmlDocument(html: string, filename: string) {
   }
 }
 
+/**
+ * Render one or more report cards (each the SAME HTML the admin sees) into a
+ * PDF with exactly one card per A4 page — so the download looks identical to the
+ * on-screen report card, ordered first-to-last, with no page numbers.
+ */
+export async function downloadReportCardsPdf(cardHtmls: string[], filename: string) {
+  const cards = (cardHtmls || []).filter(Boolean);
+  if (cards.length === 0) return;
+
+  const { default: jsPDF } = await import("jspdf");
+  const html2canvas = (await import("html2canvas")).default;
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+
+  for (let i = 0; i < cards.length; i++) {
+    const frame = document.createElement("iframe");
+    frame.style.position = "fixed";
+    frame.style.left = "-10000px";
+    frame.style.top = "0";
+    frame.style.width = "794px";
+    frame.style.height = "1123px";
+    frame.style.opacity = "0";
+    frame.setAttribute("aria-hidden", "true");
+    document.body.appendChild(frame);
+    try {
+      frame.srcdoc = ensurePrintableHtml(cards[i]);
+      await waitForFrameLoad(frame);
+      const docBody = frame.contentDocument;
+      const target = (docBody?.querySelector(".rc") as HTMLElement) || docBody?.body;
+      if (!target) continue;
+      const canvas = await html2canvas(target, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        allowTaint: false,
+      });
+      const img = canvas.toDataURL("image/jpeg", 0.92);
+      let w = pageW;
+      let h = (canvas.height * pageW) / canvas.width;
+      if (h > pageH) {
+        h = pageH;
+        w = (canvas.width * pageH) / canvas.height;
+      }
+      const x = (pageW - w) / 2;
+      const y = h < pageH ? (pageH - h) / 2 : 0;
+      if (i > 0) doc.addPage();
+      doc.addImage(img, "JPEG", x, y, w, h);
+    } catch (error) {
+      console.error("Report card render failed for one card:", error);
+    } finally {
+      frame.remove();
+    }
+  }
+
+  savePdfNativeAware(doc, pdfFilename(filename));
+}
+
 export function escapeHtml(value: string | number | null | undefined) {
   return `${value ?? ""}`
     .replace(/&/g, "&amp;")

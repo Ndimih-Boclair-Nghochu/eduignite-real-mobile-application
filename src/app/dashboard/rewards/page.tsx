@@ -104,7 +104,7 @@ function printableDocument(title: string, body: string) {
     .letterhead .right { text-align: right; }
     .rule { width: 72px; height: 1px; background: #111827; margin: 7px 0; opacity: .6; }
     .right .rule { margin-left: auto; }
-    .seal { width: 104px; height: 104px; border-radius: 50%; border: 6px solid #FCD116; display: flex; align-items: center; justify-content: center; background: #fff; box-shadow: 0 14px 38px rgba(38, 77, 115, .2); overflow: hidden; }
+    .seal { width: 104px; height: 104px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #fff; box-shadow: 0 14px 38px rgba(38, 77, 115, .2); overflow: hidden; }
     .seal img { width: 82px; height: 82px; object-fit: contain; }
     .seal span { font-size: 42px; color: #264D73; }
     .school-name { margin-top: 42px; text-align: center; text-transform: uppercase; color: #264D73; font-weight: 900; font-size: clamp(12px, 2vw, 14px); letter-spacing: .34em; }

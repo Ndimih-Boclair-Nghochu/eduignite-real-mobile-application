@@ -70,45 +70,69 @@ const normalizeList = (payload: any) => {
 function DirectoryCard({
   avatar,
   name,
-  lines,
+  role,
+  idLabel,
+  footerLeft,
+  online,
   onView,
 }: {
   avatar?: string;
   name: string;
-  lines: string[];
+  /** Subtitle under the name, e.g. "Student" or "Mathematics Teacher". */
+  role: string;
+  /** Identity number shown under the role, e.g. matricule / EMP id. */
+  idLabel?: string;
+  /** Left side of the footer row (e.g. the class). When omitted, "Active" is centered. */
+  footerLeft?: string;
+  /** Green dot on the photo — shown ONLY while the user is online. */
+  online?: boolean;
   onView?: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-2xl bg-white p-3 text-center shadow-sm ring-1 ring-black/[0.04]">
-      {avatar ? (
-        <img
-          src={avatar}
-          alt={name}
-          className="h-24 w-24 rounded-xl object-cover ring-1 ring-black/[0.06]"
-        />
-      ) : (
-        <div className="flex h-24 w-24 items-center justify-center rounded-xl bg-primary/10 text-3xl font-black text-primary">
-          {(name || "?").charAt(0).toUpperCase()}
-        </div>
-      )}
-      <p className="w-full truncate text-[13px] font-black leading-tight text-foreground">
-        {name}
-      </p>
-      <div className="space-y-0.5">
-        {lines.map((line, i) => (
-          <p key={i} className="text-[11px] font-medium leading-snug text-muted-foreground">
-            {line}
-          </p>
-        ))}
+    <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.04]">
+      <div className="relative aspect-square w-full overflow-hidden bg-slate-100">
+        {avatar ? (
+          <img src={avatar} alt={name} className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-primary/10 text-5xl font-black text-primary">
+            {(name || "?").charAt(0).toUpperCase()}
+          </div>
+        )}
+        {online ? (
+          <span
+            className="absolute right-2.5 top-2.5 h-3.5 w-3.5 rounded-full bg-green-500 ring-2 ring-white"
+            aria-label="Online"
+          />
+        ) : null}
+      </div>
+      <div className="px-3 pb-1 pt-3 text-center">
+        <p className="truncate text-[15px] font-black leading-tight text-foreground">{name}</p>
+        <p className="mt-0.5 truncate text-[12px] text-muted-foreground">{role}</p>
+        {idLabel ? (
+          <p className="mt-0.5 truncate text-[11px] text-muted-foreground/60">{idLabel}</p>
+        ) : null}
+      </div>
+      <div
+        className={cn(
+          "mx-3 mt-1 flex items-center border-t py-2 text-[11px]",
+          footerLeft ? "justify-between" : "justify-center"
+        )}
+      >
+        {footerLeft ? <span className="truncate text-muted-foreground">{footerLeft}</span> : null}
+        <span className="text-muted-foreground">Active</span>
       </div>
       {onView ? (
-        <button
-          onClick={onView}
-          className="mt-1 w-full rounded-lg bg-primary/10 py-1.5 text-[11px] font-black uppercase tracking-wide text-primary"
-        >
-          View
-        </button>
-      ) : null}
+        <div className="px-3 pb-3">
+          <button
+            onClick={onView}
+            className="w-full rounded-xl bg-neutral-900 py-2.5 text-[12px] font-black text-white"
+          >
+            View Details
+          </button>
+        </div>
+      ) : (
+        <div className="pb-1.5" />
+      )}
     </div>
   );
 }
@@ -351,11 +375,10 @@ export default function CommunityHubPage() {
                 key={s.id}
                 avatar={resolveMediaUrl(s.avatar)}
                 name={s.name || "Student"}
-                lines={[
-                  `Matricule: ${s.matricule || s.admission_number || "—"}`,
-                  "Student",
-                  `Class: ${s.class_name || "—"}`,
-                ]}
+                role="Student"
+                idLabel={s.matricule || s.admission_number || ""}
+                footerLeft={s.class_name || s.class_level || "—"}
+                online={Boolean(s.is_online)}
               />
             ))}
           </div>
@@ -370,10 +393,13 @@ export default function CommunityHubPage() {
                 key={m.id}
                 avatar={resolveMediaUrl(m.avatar)}
                 name={m.name || "Staff"}
-                lines={[
-                  `Matricule: ${m.matricule || "—"}`,
-                  STAFF_ROLE_LABELS[m.role] || m.role || "Staff",
-                ]}
+                role={
+                  m.role === "TEACHER" && m.teaching?.[0]?.subject_name
+                    ? `${m.teaching[0].subject_name} Teacher`
+                    : STAFF_ROLE_LABELS[m.role] || m.role || "Staff"
+                }
+                idLabel={m.matricule || ""}
+                online={Boolean(m.is_online)}
                 onView={m.role === "TEACHER" ? () => setViewingStaff(m) : undefined}
               />
             ))}
@@ -389,11 +415,10 @@ export default function CommunityHubPage() {
                 key={p.id}
                 avatar={resolveMediaUrl(p.avatar)}
                 name={p.name || "Parent"}
-                lines={[
-                  `Matricule: ${p.matricule || "—"}`,
-                  "Parent",
-                  `Children: ${p.children_count || 0}`,
-                ]}
+                role="Parent"
+                idLabel={p.matricule || ""}
+                footerLeft={`Children: ${p.children_count || 0}`}
+                online={Boolean(p.is_online)}
               />
             ))}
           </div>

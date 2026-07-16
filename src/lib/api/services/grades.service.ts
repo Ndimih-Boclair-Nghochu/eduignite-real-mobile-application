@@ -918,6 +918,18 @@ export const gradesService = {
     }
   },
 
+  /** Every honour roll a student has ever earned (per term across all years). */
+  async getHonourRollHistory(params?: { student_id?: string }): Promise<any> {
+    const { data } = await apiClient.get('/grades/grades/honour-roll/history/', { params });
+    return data;
+  },
+
+  /** Official multi-year transcript for a student (both cycles). */
+  async getTranscript(params?: { student_id?: string }): Promise<any> {
+    const { data } = await apiClient.get('/grades/grades/transcript/', { params });
+    return data;
+  },
+
   async getHonourRollFromStableEndpoints(params?: ListParams): Promise<any> {
     const threshold = toFiniteNumber(params?.threshold, 12);
     const [studentsResponse, gradesResponse, sequencesResponse, classSubjectsResponse] = await Promise.all([

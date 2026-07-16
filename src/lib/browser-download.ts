@@ -251,6 +251,74 @@ export async function downloadReportCardsPdf(cardHtmls: string[], filename: stri
   savePdfNativeAware(doc, pdfFilename(filename));
 }
 
+/**
+ * Render arbitrary official documents (certificates, transcripts, report
+ * cards) into a PDF — one document per page, each looking exactly like the
+ * on-screen HTML. Supports landscape documents (e.g. certificates).
+ */
+export async function downloadHtmlPagesPdf(
+  htmls: string[],
+  filename: string,
+  options: { landscape?: boolean } = {},
+) {
+  const pages = (htmls || []).filter(Boolean);
+  if (pages.length === 0) return;
+
+  const { default: jsPDF } = await import("jspdf");
+  const html2canvas = (await import("html2canvas")).default;
+  const doc = new jsPDF({ orientation: options.landscape ? "landscape" : "portrait", unit: "mm", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const frameW = options.landscape ? 1180 : 794;
+  const frameH = options.landscape ? 840 : 1123;
+
+  for (let i = 0; i < pages.length; i++) {
+    const frame = document.createElement("iframe");
+    frame.style.position = "fixed";
+    frame.style.left = "-12000px";
+    frame.style.top = "0";
+    frame.style.width = `${frameW}px`;
+    frame.style.height = `${frameH}px`;
+    frame.style.opacity = "0";
+    frame.setAttribute("aria-hidden", "true");
+    document.body.appendChild(frame);
+    try {
+      frame.srcdoc = ensurePrintableHtml(pages[i]);
+      await waitForFrameLoad(frame);
+      const docBody = frame.contentDocument;
+      const target =
+        (docBody?.querySelector(".cert") as HTMLElement) ||
+        (docBody?.querySelector(".transcript") as HTMLElement) ||
+        (docBody?.querySelector(".rc") as HTMLElement) ||
+        docBody?.body;
+      if (!target) continue;
+      const canvas = await html2canvas(target, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        allowTaint: false,
+      });
+      const img = canvas.toDataURL("image/jpeg", 0.92);
+      let w = pageW;
+      let h = (canvas.height * pageW) / canvas.width;
+      if (h > pageH) {
+        h = pageH;
+        w = (canvas.width * pageH) / canvas.height;
+      }
+      const x = (pageW - w) / 2;
+      const y = h < pageH ? (pageH - h) / 2 : 0;
+      if (i > 0) doc.addPage();
+      doc.addImage(img, "JPEG", x, y, w, h);
+    } catch (error) {
+      console.error("Document render failed for one page:", error);
+    } finally {
+      frame.remove();
+    }
+  }
+
+  savePdfNativeAware(doc, pdfFilename(filename));
+}
+
 export function escapeHtml(value: string | number | null | undefined) {
   return `${value ?? ""}`
     .replace(/&/g, "&amp;")

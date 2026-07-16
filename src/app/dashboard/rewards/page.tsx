@@ -54,6 +54,8 @@ import { resolveMediaUrl } from "@/lib/media";
 import { downloadHtmlDocument, escapeHtml } from "@/lib/browser-download";
 import { gradesService } from "@/lib/api/services/grades.service";
 import { schoolsService } from "@/lib/api/services/schools.service";
+import { buildHonourRollCertificateHtml as buildOfficialCertificateHtml } from "@/lib/honour-roll-certificate";
+import { downloadHtmlPagesPdf } from "@/lib/browser-download";
 
 function buildDeterministicSerial(prefix: string, ...parts: Array<string | number | null | undefined>) {
   const normalized = parts
@@ -161,66 +163,23 @@ function printableDocument(title: string, body: string) {
   </style></head><body>${body}</body></html>`;
 }
 
+// The single official certificate design (shared across web, desktop and
+// mobile) — identical on screen, in every account it is published to, and in
+// the downloaded PDF.
 function buildHonourRollCertificateHtml(student: any, fallbackSchool: any) {
   const school = getSchoolIdentity(student, fallbackSchool);
-  const date = new Date().toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" });
-  const periodLabel = student?.periodLabel || "Current Academic Period";
-  const serial = buildDeterministicSerial(`${school.matricule}-HONOUR`, student?.id, student?.class, periodLabel, new Date().getFullYear());
-  const logoHtml = school.logo
-    ? `<img src="${escapeHtml(school.logo)}" alt="${escapeHtml(school.name)} logo" />`
-    : "<span>*</span>";
-
-  return `<section class="sheet">
-    <div class="cert-content">
-      <div class="letterhead">
-        <div>
-          <div style="color:#264D73;">Republic of Cameroon</div>
-          <div>Peace - Work - Fatherland</div>
-          <div class="rule"></div>
-          <div>Ministry of Secondary Education</div>
-        </div>
-        <div class="seal">${logoHtml}</div>
-        <div class="right">
-          <div style="color:#264D73;">Republique du Cameroun</div>
-          <div>Paix - Travail - Patrie</div>
-          <div class="rule"></div>
-          <div>Ministere des Enseignements Secondaires</div>
-        </div>
-      </div>
-      <div class="school-name">${escapeHtml(school.name)}</div>
-      <div class="motto">${escapeHtml(school.motto)}</div>
-      <div class="cert-title">Honour Roll</div>
-      <div class="cert-subtitle">Certificate of Achievement</div>
-      <div class="presented">This school-issued academic award is presented to</div>
-      <div class="student-name">${escapeHtml(student?.name || "Student")}</div>
-      <div class="meta">Matricule: ${escapeHtml(student?.id || "")} | Class: ${escapeHtml(student?.class || "")}</div>
-      <div class="statement">
-        For demonstrating exceptional academic commitment during the <strong>${escapeHtml(periodLabel)}</strong> academic period,
-        and achieving a verified average of <strong>${escapeHtml(Number(student?.average || student?.annualAvg || 0).toFixed(2))} / 20</strong>
-        with the distinction <strong>${escapeHtml(student?.award || "Honour Roll")}</strong>.
-      </div>
-      <div class="details-grid">
-        <div><span>Class</span><strong>${escapeHtml(student?.class || "")}</strong></div>
-        <div><span>Sub-school</span><strong>${escapeHtml(student?.subSchool || student?.section || "Main School")}</strong></div>
-        <div><span>Rank</span><strong>${escapeHtml(student?.rank || "N/A")}${student?.totalStudents ? ` / ${escapeHtml(student.totalStudents)}` : ""}</strong></div>
-        <div><span>Average</span><strong>${escapeHtml(Number(student?.average || student?.annualAvg || 0).toFixed(2))} / 20</strong></div>
-      </div>
-      <div class="congrats">Congratulations</div>
-      <div class="signatures">
-        <div>
-          <div class="signature-line">The Principal</div>
-        </div>
-        <div>
-          <div class="signature-line">School Seal</div>
-          <div class="serial">${escapeHtml(serial)}</div>
-        </div>
-      </div>
-      <div class="footer">
-        <div>${escapeHtml(school.name)} Official Academic Registry</div>
-        <div>${escapeHtml(date)}</div>
-      </div>
-    </div>
-  </section>`;
+  return buildOfficialCertificateHtml(
+    {
+      name: student?.name,
+      class_name: student?.class || student?.class_name || student?.className || student?.student_class,
+      academic_year: student?.academicYear || student?.academic_year || fallbackSchool?.academic_year || "",
+      term_label: student?.termLabel || student?.term_label,
+      average: student?.average ?? student?.annualAvg ?? student?.annual_average ?? 0,
+      class_master: student?.classMaster || student?.class_master,
+      principal: fallbackSchool?.principal,
+    },
+    { ...(fallbackSchool || {}), ...school },
+  );
 }
 
 function buildHonourRollRegistryHtml(students: any[], fallbackSchool: any, threshold: number, periodLabel: string, summary: any) {
@@ -271,6 +230,26 @@ export default function AcademicRewardsPage() {
   const isAdmin = ["SCHOOL_ADMIN", "SUB_ADMIN"].includes(user?.role || "");
   const isStudent = user?.role === "STUDENT";
   const isStaff = ["TEACHER", "BURSAR", "LIBRARIAN"].includes(user?.role || "");
+
+  // Every honour roll the student has ever earned, filterable by term.
+  const [honourHistory, setHonourHistory] = useState<any[]>([]);
+  const [historyTermFilter, setHistoryTermFilter] = useState<string>("all");
+  const [historyLoading, setHistoryLoading] = useState(false);
+  useEffect(() => {
+    if (!isStudent) return;
+    let alive = true;
+    setHistoryLoading(true);
+    gradesService
+      .getHonourRollHistory()
+      .then((data) => { if (alive) setHonourHistory(Array.isArray(data?.results) ? data.results : []); })
+      .catch(() => { if (alive) setHonourHistory([]); })
+      .finally(() => { if (alive) setHistoryLoading(false); });
+    return () => { alive = false; };
+  }, [isStudent]);
+  const filteredHonourHistory = useMemo(
+    () => honourHistory.filter((entry: any) => historyTermFilter === "all" || String(entry.term) === historyTermFilter),
+    [honourHistory, historyTermFilter],
+  );
 
   const [sequences, setSequences] = useState<any[]>([]);
   const [rewardScope, setRewardScope] = useState<"active" | "sequence" | "term">("active");
@@ -464,16 +443,22 @@ export default function AcademicRewardsPage() {
         : "Current Academic Period");
 
     if (title === "Honour Roll Certificate" && viewingCertificate) {
-      const html = printableDocument(title, buildHonourRollCertificateHtml(viewingCertificate, user?.school));
-      downloadHtmlDocument(html, `${String(viewingCertificate.name || "student").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-honour-roll-certificate.html`);
-      toast({ title: "Certificate prepared", description: `${user?.school?.name || "The school"} honour-roll certificate has been downloaded.` });
+      void downloadHtmlPagesPdf(
+        [buildHonourRollCertificateHtml(viewingCertificate, viewingCertificate?.school || user?.school)],
+        `${String(viewingCertificate.name || "student").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-honour-roll-certificate`,
+        { landscape: true },
+      );
+      toast({ title: "Certificate downloaded", description: `${user?.school?.name || "The school"} honour-roll certificate has been saved as a PDF.` });
       return;
     }
 
     if (title === "Batch Certificates") {
-      const body = eligibleStudents.map((student) => buildHonourRollCertificateHtml(student, user?.school)).join("");
-      downloadHtmlDocument(printableDocument(title, body), `school-honour-roll-certificates.html`);
-      toast({ title: "Certificates prepared", description: `${eligibleStudents.length} school-issued certificates have been downloaded.` });
+      void downloadHtmlPagesPdf(
+        eligibleStudents.map((student) => buildHonourRollCertificateHtml(student, user?.school)),
+        `school-honour-roll-certificates`,
+        { landscape: true },
+      );
+      toast({ title: "Certificates downloaded", description: `${eligibleStudents.length} certificates saved as a PDF — one per page.` });
       return;
     }
 
@@ -789,6 +774,87 @@ export default function AcademicRewardsPage() {
           </Card>
         )}
 
+        {/* ALL HONOUR ROLLS EVER EARNED, WITH TERM FILTER */}
+        <Card className="border-none shadow-xl rounded-[2.5rem] bg-white overflow-hidden">
+          <CardHeader className="p-8 pb-4">
+            <CardTitle className="flex items-center gap-3 text-xl font-black uppercase tracking-tight text-primary">
+              <Trophy className="h-5 w-5 text-secondary" /> My Honour Rolls
+            </CardTitle>
+            <CardDescription>Every honour roll you have earned across all terms and academic years.</CardDescription>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {["all", "1", "2", "3"].map((value) => (
+                <button
+                  key={value}
+                  onClick={() => setHistoryTermFilter(value)}
+                  className={cn(
+                    "rounded-full border px-4 py-1.5 text-[11px] font-black uppercase tracking-widest transition-colors",
+                    historyTermFilter === value ? "border-primary bg-primary text-white" : "border-border bg-white text-muted-foreground",
+                  )}
+                >
+                  {value === "all" ? "All terms" : `Term ${value}`}
+                </button>
+              ))}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3 p-8 pt-2">
+            {historyLoading ? (
+              <p className="py-6 text-sm text-muted-foreground">Loading your honour rolls...</p>
+            ) : filteredHonourHistory.length === 0 ? (
+              <p className="py-6 text-sm text-muted-foreground">
+                {honourHistory.length === 0
+                  ? "You have not earned an honour roll yet — keep pushing for excellence!"
+                  : "No honour rolls for this term filter."}
+              </p>
+            ) : (
+              filteredHonourHistory.map((entry: any) => (
+                <div key={`${entry.academic_year}-${entry.term}`} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
+                  <div>
+                    <p className="font-black text-primary">{entry.term_label || `Term ${entry.term}`} · {entry.academic_year}</p>
+                    <p className="text-xs text-muted-foreground">{entry.class_name || "—"} · Average {Number(entry.average || 0).toFixed(2)}/20</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-9 rounded-xl font-bold"
+                      onClick={() => setViewingCertificate({
+                        name: user?.name,
+                        class: entry.class_name,
+                        academicYear: entry.academic_year,
+                        termLabel: entry.term_label || `Term ${entry.term}`,
+                        average: entry.average,
+                        school: user?.school,
+                      })}
+                    >
+                      View
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-9 rounded-xl font-bold"
+                      onClick={() => {
+                        void downloadHtmlPagesPdf(
+                          [buildHonourRollCertificateHtml({
+                            name: user?.name,
+                            class: entry.class_name,
+                            academicYear: entry.academic_year,
+                            termLabel: entry.term_label || `Term ${entry.term}`,
+                            average: entry.average,
+                          }, user?.school)],
+                          `${String(user?.name || "student").toLowerCase().replace(/[^a-z0-9]+/g, "-")}-honour-roll-${entry.academic_year}-t${entry.term}`,
+                          { landscape: true },
+                        );
+                        toast({ title: "Certificate downloaded", description: "Your honour-roll certificate has been saved as a PDF." });
+                      }}
+                    >
+                      <Download className="mr-1 h-4 w-4" /> PDF
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
         {/* STUDENT CERTIFICATE MODAL */}
         <Dialog open={!!viewingCertificate} onOpenChange={() => setViewingCertificate(null)}>
           <DialogContent className="sm:max-w-5xl max-h-[95vh] p-0 border-none shadow-2xl rounded-[2.5rem] overflow-hidden flex flex-col">
@@ -803,7 +869,7 @@ export default function AcademicRewardsPage() {
             </DialogHeader>
             <div className="flex-1 overflow-y-auto bg-muted p-2 md:p-10 print:p-0 print:bg-white no-scrollbar">
               <div className="overflow-x-auto rounded-xl border-2 border-primary/10 shadow-inner bg-white">
-                <CertificatePreview student={viewingCertificate} platform={platformSettings} />
+                <CertificatePreview student={{ ...viewingCertificate, school: viewingCertificate?.school || user?.school }} platform={platformSettings} />
               </div>
             </div>
             <DialogFooter className="bg-accent/10 p-6 border-t border-accent flex justify-between items-center shrink-0 no-print">
@@ -1064,7 +1130,7 @@ export default function AcademicRewardsPage() {
           </DialogHeader>
           <div className="flex-1 overflow-y-auto bg-muted p-4 md:p-10 print:p-0 print:bg-white no-scrollbar">
             <div className="overflow-x-auto rounded-xl border-2 border-primary/10 shadow-inner bg-white">
-              <CertificatePreview student={viewingCertificate} platform={platformSettings} />
+              <CertificatePreview student={{ ...viewingCertificate, school: viewingCertificate?.school || user?.school }} platform={platformSettings} />
             </div>
           </div>
           <DialogFooter className="bg-accent/10 p-6 border-t border-accent flex justify-end gap-3 shrink-0 no-print">
@@ -1077,125 +1143,25 @@ export default function AcademicRewardsPage() {
   );
 }
 
+// Renders the official certificate exactly as it is downloaded — one shared
+// design across screen, PDF and every account.
 function CertificatePreview({ student, platform: _platform }: { student: any, platform: any }) {
-  const date = new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
-  const school = student?.school || {};
-  const schoolName = school.name || "School";
-  const schoolMotto = school.motto || "Excellence - Discipline - Service";
-  const schoolMatricule = school.matricule || school.short_name || "SCHOOL";
-  const serial = buildDeterministicSerial(`${schoolMatricule}-HONOUR`, student?.id, student?.class, student?.periodLabel, new Date().getFullYear());
-  const periodLabel = student?.periodLabel || "Current Academic Period";
-  const schoolLogo = resolveMediaUrl(school.logo || "");
-
-  return (
-    <div id="honour-roll-print" className="bg-white p-12 md:p-24 border-[16px] border-double border-[#264D73]/20 shadow-2xl w-[1100px] md:w-full max-w-5xl mx-auto font-serif text-black relative overflow-hidden print:border-none print:shadow-none print:w-full">
-      <div className="absolute top-0 left-0 p-8 opacity-40"><LaurelCorner className="w-24 h-24 text-[#264D73]" /></div>
-      <div className="absolute top-0 right-0 p-8 opacity-40 rotate-90"><LaurelCorner className="w-24 h-24 text-[#264D73]" /></div>
-      <div className="absolute bottom-0 left-0 p-8 opacity-40 -rotate-90"><LaurelCorner className="w-24 h-24 text-[#264D73]" /></div>
-      <div className="absolute bottom-0 right-0 p-8 opacity-40 rotate-180"><LaurelCorner className="w-24 h-24 text-[#264D73]" /></div>
-      
-      <div className="absolute inset-6 border border-[#264D73]/10 pointer-events-none" />
-      
-      <div className="relative z-10 space-y-12">
-        <div className="grid grid-cols-3 gap-4 items-center text-center">
-          <div className="space-y-1 text-[8px] uppercase font-black text-left">
-            <p className="text-[#264D73]">Republic of Cameroon</p>
-            <p>Peace - Work - Fatherland</p>
-            <div className="h-px bg-black w-10 my-1" />
-            <p>Ministry of Secondary Education</p>
-          </div>
-          <div className="flex flex-col items-center">
-            <div className="w-24 h-24 bg-white rounded-full shadow-2xl flex items-center justify-center border-[6px] border-[#FCD116] relative mb-2">
-               <div className="absolute -bottom-4 bg-[#FCD116] text-[#264D73] px-3 py-0.5 rounded text-[8px] font-black uppercase shadow-sm">EXCELLENCE</div>
-               {schoolLogo ? <img src={schoolLogo} alt={`${schoolName} logo`} className="w-16 h-16 object-contain" /> : null}
-            </div>
-          </div>
-          <div className="space-y-1 text-[8px] uppercase font-black text-right">
-            <p className="text-[#264D73]">Republique du Cameroun</p>
-            <p>Paix - Travail - Patrie</p>
-            <div className="h-px bg-black w-10 ml-auto my-1" />
-            <p>Min. des Enseignements Secondaires</p>
-          </div>
-        </div>
-
-        <div className="text-center space-y-4">
-          <h2 className="text-[10px] font-black uppercase tracking-[0.5em] text-[#264D73]/60 mb-2">{schoolName}</h2>
-          <p className="text-xs text-muted-foreground italic">{schoolMotto}</p>
-          <h1 className="text-6xl md:text-8xl font-black italic text-[#264D73] uppercase tracking-tighter leading-none drop-shadow-sm">Honour Roll</h1>
-          <p className="text-2xl md:text-3xl font-bold uppercase tracking-[0.3em] text-[#FCD116] italic drop-shadow-sm">Certificate of Achievement</p>
-        </div>
-
-        <div className="text-center space-y-12 py-10">
-          <p className="text-xs font-black uppercase tracking-[0.4em] text-[#264D73]/40">THIS PRESTIGIOUS AWARD IS PROUDLY PRESENTED TO :</p>
-          
-          <div className="space-y-4">
-            <h2 className="text-5xl md:text-7xl font-black text-[#264D73] leading-tight uppercase tracking-tight">
-              {student?.name}
-            </h2>
-            <div className="flex items-center justify-center gap-6 pt-4">
-               <div className="h-px w-16 bg-[#264D73]/20" />
-               <p className="font-mono text-sm md:text-lg font-bold uppercase tracking-widest text-[#264D73]/60">
-                 Matricule: <span className="text-[#264D73]">{student?.id}</span> | Class: <span className="text-[#264D73]">{student?.class}</span>
-               </p>
-               <div className="h-px w-16 bg-[#264D73]/20" />
-            </div>
-          </div>
-
-           <div className="max-w-2xl mx-auto leading-relaxed text-lg md:text-xl font-medium text-gray-700 italic px-10">
-            For demonstrating exceptional academic commitment during the <span className="font-black text-[#264D73]">{periodLabel}</span> pedagogical cycle, and achieving a verified average of <span className="font-black text-[#264D73] underline decoration-[#FCD116] decoration-4 underline-offset-8">{Number(student?.average || student?.annualAvg || 0).toFixed(2)} / 20</span> with the distinction <span className="font-black text-[#264D73]">{student?.award || "Honour Roll"}</span>.
-          </div>
-
-          <div className="py-6">
-             <p className="text-4xl md:text-5xl font-black text-[#FCD116] font-serif opacity-80 italic transform -rotate-3">Congratulations</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-20 md:gap-40 pt-16 items-end">
-          <div className="text-center space-y-6">
-            <div className="h-px bg-black/20 w-full" />
-            <div className="space-y-1">
-              <p className="font-black text-[10px] md:text-xs uppercase tracking-[0.3em] text-[#264D73]">The Principal</p>
-              <div className="h-16 w-full relative flex items-center justify-center">
-                 <SignatureSVG className="w-full h-full text-[#264D73]/10 p-4" />
-                 <div className="absolute inset-0 flex items-center justify-center opacity-5">
-                    {schoolLogo ? <img src={schoolLogo} className="w-12 h-12 grayscale" /> : null}
-                 </div>
-              </div>
-            </div>
-          </div>
-          <div className="text-center space-y-6 relative">
-            <div className="absolute top-[-80px] left-1/2 -translate-x-1/2">
-              <ShieldCheck className="w-24 h-24 text-[#264D73] opacity-[0.05] rotate-12" />
-            </div>
-            <div className="h-px bg-black/20 w-full" />
-            <div className="space-y-1">
-              <p className="font-black text-[10px] md:text-xs uppercase tracking-[0.3em] text-[#264D73]">Institutional Seal</p>
-              <p className="font-mono font-black text-[9px] opacity-40">{serial}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="text-center pt-12 border-t border-black/5 flex flex-col md:flex-row items-center justify-between gap-4">
-           <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-[#264D73] rounded-lg p-2 flex items-center justify-center">
-                 {schoolLogo ? <img src={schoolLogo} alt="School logo" className="w-full h-full object-contain" /> : null}
-              </div>
-              <p className="text-left text-[8px] md:text-[10px] uppercase font-black text-muted-foreground opacity-30 tracking-[0.2em]">
-                {schoolName} Official Academic Registry | School-Issued Honour Roll | {new Date().getFullYear()}
-              </p>
-           </div>
-           <div className="flex items-center gap-4">
-              <QrCode className="w-12 h-12 opacity-10" />
-              <div className="text-left">
-                <p className="text-[7px] font-black uppercase text-[#264D73]/40 leading-none">Date Issued</p>
-                <p className="text-[10px] font-bold text-[#264D73]/60">{date}</p>
-              </div>
-           </div>
-        </div>
-      </div>
-    </div>
+  const school = { ...(student?.school || {}) };
+  const html = buildOfficialCertificateHtml(
+    {
+      name: student?.name,
+      class_name: student?.class || student?.class_name || student?.className || student?.student_class,
+      academic_year: student?.academicYear || student?.academic_year || school?.academic_year || "",
+      term_label: student?.termLabel || student?.term_label,
+      average: student?.average ?? student?.annualAvg ?? student?.annual_average ?? 0,
+      class_master: student?.classMaster || student?.class_master,
+      principal: school?.principal,
+    },
+    school,
   );
+  return <div id="honour-roll-print" dangerouslySetInnerHTML={{ __html: html }} />;
 }
+
 
 function ProfessionalCertificatePreview({ remark, student, platform }: { remark: any, student: any, platform: any }) {
   const date = remark?.date || new Date().toLocaleDateString();

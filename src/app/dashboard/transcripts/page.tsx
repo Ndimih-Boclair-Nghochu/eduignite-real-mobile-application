@@ -1,7 +1,10 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { gradesService } from "@/lib/api/services/grades.service";
+import { buildOfficialTranscriptHtml } from "@/lib/official-transcript";
+import { downloadHtmlPagesPdf } from "@/lib/browser-download";
 import { useI18n } from "@/lib/i18n-context";
 import { useMyClassHistory, useStudents } from "@/lib/hooks/useStudents";
 import { useGrades, useSequences } from "@/lib/hooks/useGrades";
@@ -133,19 +136,34 @@ export default function TranscriptsPage() {
     [studentList, searchTerm, classFilter, sectionFilter]
   );
 
+  // The official transcript uses the real multi-year record computed by the
+  // school platform (every class level, every term, both cycles) — the same
+  // data and design on screen and in the downloaded PDF.
+  const fetchTranscriptData = async (student: any) => {
+    const params = !isStudent && (student?.recordId || student?.id)
+      ? { student_id: String(student.recordId || student.id) }
+      : undefined;
+    return gradesService.getTranscript(params);
+  };
+
+  const [previewTranscriptHtml, setPreviewTranscriptHtml] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  useEffect(() => {
+    if (!previewStudent) { setPreviewTranscriptHtml(""); return; }
+    let alive = true;
+    setPreviewLoading(true);
+    fetchTranscriptData(previewStudent)
+      .then((data) => { if (alive) setPreviewTranscriptHtml(buildOfficialTranscriptHtml(data)); })
+      .catch(() => { if (alive) setPreviewTranscriptHtml(""); })
+      .finally(() => { if (alive) setPreviewLoading(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewStudent]);
+
   const downloadTranscript = async (student: any) => {
-    const historyRecords = isStudent ? classHistoryQuery.data?.history || [] : [];
-    const safeName = `${student.name || "student"}_transcript`.replace(/\s+/g, "_").toLowerCase();
-    await downloadOfficialTranscriptPdf(student, {
-      schoolName: schoolBrand.name,
-      schoolLogo: schoolBrand.logo,
-      schoolMotto: schoolBrand.motto,
-      schoolMatricule: schoolBrand.matricule,
-      schoolLocation: schoolBrand.location,
-      currentClass: student.class,
-      historyRecords,
-      filename: `${safeName}.pdf`,
-    });
+    const safeName = `${student.name || "student"}_official_transcript`.replace(/\s+/g, "_").toLowerCase();
+    const data = await fetchTranscriptData(student);
+    await downloadHtmlPagesPdf([buildOfficialTranscriptHtml(data)], safeName, { landscape: true });
   };
 
   const handleBulkIssue = async () => {
@@ -154,15 +172,20 @@ export default function TranscriptsPage() {
     setIsProcessing(true);
     try {
       const batchLabel = classFilter !== "all" ? classFilter : sectionFilter !== "all" ? sectionFilter : "school";
-      await downloadTranscriptBatchPdf(filteredStudents.map(buildTranscriptStudent), {
-        schoolName: schoolBrand.name,
-        schoolLogo: schoolBrand.logo,
-        schoolMotto: schoolBrand.motto,
-        schoolMatricule: schoolBrand.matricule,
-        schoolLocation: schoolBrand.location,
-        filename: `${batchLabel.replace(/\s+/g, "_").toLowerCase()}_transcripts.pdf`,
-      });
-      toast({ title: "Batch ready", description: `Downloaded ${filteredStudents.length} official transcript PDF record(s).` });
+      const htmls: string[] = [];
+      for (const student of filteredStudents) {
+        try {
+          const data = await fetchTranscriptData(student);
+          htmls.push(buildOfficialTranscriptHtml(data));
+        } catch {
+          /* skip students whose transcript cannot be generated */
+        }
+      }
+      if (!htmls.length) throw new Error("No transcripts could be generated.");
+      await downloadHtmlPagesPdf(htmls, `${batchLabel.replace(/\s+/g, "_").toLowerCase()}_transcripts`, { landscape: true });
+      toast({ title: "Batch ready", description: `Downloaded ${htmls.length} official transcript(s) — one per page.` });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Batch failed", description: error?.message || "The transcripts could not be generated." });
     } finally {
       setIsProcessing(false);
     }
@@ -173,6 +196,8 @@ export default function TranscriptsPage() {
     try {
       await downloadTranscript(buildTranscriptStudent(student));
       toast({ title: "Transcript ready", description: `Downloaded the official PDF record for ${student.name}.` });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Transcript failed", description: error?.message || "The transcript could not be generated." });
     } finally {
       setIsProcessing(false);
     }
@@ -335,7 +360,16 @@ export default function TranscriptsPage() {
           </DialogHeader>
           <div className="flex-1 overflow-y-auto bg-muted p-2 md:p-10 print:p-0 print:bg-white no-scrollbar">
             <div className="overflow-x-auto rounded-xl border-2 border-primary/10 shadow-inner bg-white">
-              <LandscapeTranscript student={previewStudent} school={schoolBrand} historyRecords={isStudent ? classHistoryQuery.data?.history || [] : []} />
+              {previewLoading ? (
+                <div className="flex items-center justify-center gap-3 py-20">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary/40" />
+                  <span className="text-sm text-muted-foreground">Compiling the official transcript...</span>
+                </div>
+              ) : previewTranscriptHtml ? (
+                <div dangerouslySetInnerHTML={{ __html: previewTranscriptHtml }} />
+              ) : (
+                <p className="py-20 text-center text-sm text-muted-foreground">The transcript could not be loaded. Please try again.</p>
+              )}
             </div>
           </div>
           <DialogFooter className="bg-accent/10 p-6 border-t border-accent flex justify-between items-center shrink-0 no-print">

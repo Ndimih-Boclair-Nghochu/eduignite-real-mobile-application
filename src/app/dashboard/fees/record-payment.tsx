@@ -21,7 +21,9 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { feesService } from "@/lib/api/services/fees.service";
 import { usersService } from "@/lib/api/services/users.service";
+import { usePlatformFees } from "@/lib/hooks/usePlatform";
 import { useHierarchyClasses } from "@/lib/hooks/useSchools";
+import { studentSubscriptionBlocks } from "./subscription-access";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import { buildFeeReceiptHtml, downloadReceiptHtml, printReceiptHtml, receiptFromPayment, money } from "./fee-receipt";
 
@@ -90,9 +92,13 @@ export function RecordPayment() {
     });
   }, [students, search, classFilter, subSchoolFilter]);
 
+  const platformFeesQuery = usePlatformFees();
   const pager = usePagination(filteredStudents, 8);
   const selectedStudent = useMemo(() => students.find((s: any) => String(s.id) === String(selectedStudentId)) || null, [students, selectedStudentId]);
-  const platformPaid = Boolean(selectedStudent?.is_license_paid);
+  // Recording is blocked only when the subscription is genuinely required and
+  // unpaid past the deadline — not merely when is_license_paid is false (a zero
+  // fee or a deadline that hasn't passed means no subscription is owed).
+  const subscriptionBlocks = studentSubscriptionBlocks(selectedStudent, platformFeesQuery.data, platformSettings);
   const selectedFee = useMemo(() => feeTypes.find((f: any) => String(f.id) === String(feeId)) || null, [feeTypes, feeId]);
 
   const selectStudent = (id: string) => {
@@ -136,11 +142,11 @@ export function RecordPayment() {
     if (!selectedStudent) {
       return <p className="py-10 text-center text-sm text-muted-foreground">No student selected yet.</p>;
     }
-    if (!platformPaid) {
+    if (subscriptionBlocks) {
       return (
         <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-          <span>{selectedStudent.name}'s subscription is not paid. Pay it in the <b>Subscription</b> tab before recording any fee.</span>
+          <span>{selectedStudent.name}'s subscription is due and unpaid past the deadline. Settle it in the <b>Subscription</b> tab before recording any fee.</span>
         </div>
       );
     }
@@ -241,7 +247,12 @@ export function RecordPayment() {
                       <p className="truncate text-[10px] font-mono text-muted-foreground">{student.matricule} · {classOf(student) || "—"}</p>
                     </td>
                     <td className="px-3 py-2.5 text-right">
-                      <Badge className={cn("text-[8px] font-black uppercase", student.is_license_paid ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>{student.is_license_paid ? "Active" : "Unpaid"}</Badge>
+                      {(() => {
+                        const blocked = studentSubscriptionBlocks(student, platformFeesQuery.data, platformSettings);
+                        return (
+                          <Badge className={cn("text-[8px] font-black uppercase", blocked ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700")}>{blocked ? "Unpaid" : "Active"}</Badge>
+                        );
+                      })()}
                     </td>
                   </tr>
                 ))}

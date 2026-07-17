@@ -21,6 +21,7 @@ import { getApiErrorMessage } from "@/lib/api/errors";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { buildFeeReceiptHtml, downloadReceiptHtml, printReceiptHtml, receiptFromPayment, money } from "./fee-receipt";
+import { resolveStudentSubscriptionFee, studentSubscriptionBlocks } from "./subscription-access";
 
 /**
  * Subscription tab — the ONLY place the platform subscription charge is paid.
@@ -49,17 +50,13 @@ export function Subscription() {
   const schoolId = (typeof (user as any)?.school === "object" ? (user as any)?.school?.id : (user as any)?.school) || (user as any)?.school_id || "";
   const schoolName = (typeof (user as any)?.school === "object" && (user as any)?.school?.name) || platformSettings?.name || "EduIgnite School";
 
-  // The authoritative subscription amount is set by the founders and returned by
-  // /platform/fees/. Fall back to whatever the cached platform settings carry so
-  // the figure (e.g. 500) is always shown instead of "Set by EduIgnite".
+  // The authoritative subscription amount is the founder-set value from
+  // /platform/fees/ (what the backend reads first) — NOT the merged DEFAULT_FEES
+  // in platform settings, which would mask a value of 0. A zero fee means the
+  // subscription is free and no student is restricted.
   const platformFeesQuery = usePlatformFees();
-  const platformFees = (platformSettings?.fees ?? {}) as Record<string, string | number>;
-  const studentFeeFromApi = Number(
-    normalizeList(platformFeesQuery.data).find((f: any) => String(f.role).toUpperCase() === "STUDENT")?.amount ?? 0,
-  );
-  const platformFeeAmount = studentFeeFromApi > 0
-    ? studentFeeFromApi
-    : Number(platformFees.STUDENT ?? platformFees.student ?? 0);
+  const { amount: platformFeeAmount, known: feeKnown } = resolveStudentSubscriptionFee(platformFeesQuery.data, platformSettings);
+  const subscriptionRequired = platformFeeAmount > 0;
 
   const [search, setSearch] = useState("");
   const [classFilter, setClassFilter] = useState(ALL);
@@ -110,12 +107,19 @@ export function Subscription() {
   }, [students, search, classFilter, subSchoolFilter, statusFilter]);
 
   const pager = usePagination(filtered, 20);
-  const paidCount = useMemo(() => students.filter((s: any) => s.is_license_paid).length, [students]);
-  const unpaidCount = students.length - paidCount;
+  // When the subscription is free (fee 0), every student is effectively settled.
+  const paidCount = useMemo(
+    () => (subscriptionRequired ? students.filter((s: any) => s.is_license_paid).length : students.length),
+    [students, subscriptionRequired],
+  );
+  const unpaidCount = Math.max(students.length - paidCount, 0);
 
-  const selectableOnPage = pager.pageItems.filter((s: any) => !s.is_license_paid);
+  const selectableOnPage = subscriptionRequired ? pager.pageItems.filter((s: any) => !s.is_license_paid) : [];
   const allPageSelected = selectableOnPage.length > 0 && selectableOnPage.every((s: any) => selected.has(String(s.id)));
-  const selectedStudents = useMemo(() => students.filter((s: any) => selected.has(String(s.id)) && !s.is_license_paid), [students, selected]);
+  const selectedStudents = useMemo(
+    () => (subscriptionRequired ? students.filter((s: any) => selected.has(String(s.id)) && !s.is_license_paid) : []),
+    [students, selected, subscriptionRequired],
+  );
 
   const toggleOne = (id: string) => {
     setSelected((prev) => {
@@ -240,7 +244,7 @@ export function Subscription() {
           </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-4 p-8 pt-2 sm:grid-cols-4">
-          <div className="rounded-2xl bg-white/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Subscription</p><p className="mt-2 text-xl font-black">{platformFeeAmount > 0 ? money(platformFeeAmount) : "Not set"}</p></div>
+          <div className="rounded-2xl bg-white/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Subscription</p><p className="mt-2 text-xl font-black">{platformFeeAmount > 0 ? money(platformFeeAmount) : (feeKnown ? "Free" : "Not set")}</p></div>
           <div className="rounded-2xl bg-white/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Total Students</p><p className="mt-2 text-xl font-black">{students.length}</p></div>
           <div className="rounded-2xl bg-white/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Paid</p><p className="mt-2 text-xl font-black text-green-300">{paidCount}</p></div>
           <div className="rounded-2xl bg-white/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-white/60">Not Yet Paid</p><p className="mt-2 text-xl font-black text-amber-300">{unpaidCount}</p></div>
@@ -327,7 +331,7 @@ export function Subscription() {
                   return (
                     <TableRow key={s.id} className="odd:bg-accent/5">
                       <TableCell className="pl-4">
-                        {!paid ? (
+                        {subscriptionRequired && !paid ? (
                           <input type="checkbox" checked={selected.has(String(s.id))} onChange={() => toggleOne(String(s.id))} className="h-4 w-4 accent-primary" aria-label={`Select ${s.name}`} />
                         ) : null}
                       </TableCell>
@@ -336,10 +340,12 @@ export function Subscription() {
                       <TableCell>{classOf(s) || "—"}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{subSchoolOf(s)}</TableCell>
                       <TableCell>
-                        <Badge className={cn("border-none font-black uppercase text-[10px]", paid ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>{paid ? "Paid" : "Not paid"}</Badge>
+                        <Badge className={cn("border-none font-black uppercase text-[10px]", (!subscriptionRequired || paid) ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>{!subscriptionRequired ? "Free" : paid ? "Paid" : "Not paid"}</Badge>
                       </TableCell>
                       <TableCell className="pr-6 text-right">
-                        {paid ? (
+                        {!subscriptionRequired ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-green-600"><CheckCircle2 className="h-4 w-4" /> Free</span>
+                        ) : paid ? (
                           <span className="inline-flex items-center gap-1 text-xs font-bold text-green-600"><CheckCircle2 className="h-4 w-4" /> Settled</span>
                         ) : (
                           <Button size="sm" className="h-9 gap-2 rounded-xl font-bold" onClick={() => { setPaying(s); setPhone(""); setTxn(null); setOperator("mtn_momo"); }}>
@@ -369,7 +375,7 @@ export function Subscription() {
           <div className="space-y-4">
             <div className="rounded-2xl border bg-accent/10 p-4 text-center">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Amount to pay</p>
-              <p className="mt-1 text-2xl font-black text-primary">{platformFeeAmount > 0 ? money(platformFeeAmount) : "Not set"}</p>
+              <p className="mt-1 text-2xl font-black text-primary">{platformFeeAmount > 0 ? money(platformFeeAmount) : (feeKnown ? "Free" : "Not set")}</p>
             </div>
             <div className="space-y-2">
               <Label>Mobile Money</Label>

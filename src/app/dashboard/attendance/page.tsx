@@ -104,6 +104,7 @@ export default function AttendancePage() {
   const [studentSummary, setStudentSummary] = useState<any>(null);
   const [classStudents, setClassStudents] = useState<any[]>([]);
   const [schoolClasses, setSchoolClasses] = useState<any[]>([]);
+  const [classSubjectLinks, setClassSubjectLinks] = useState<any[]>([]);
   const [studentProfile, setStudentProfile] = useState<any>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
 
@@ -122,29 +123,40 @@ export default function AttendancePage() {
   const { data: schoolSettings } = useSchoolSettings(user?.school?.id || "");
   const { data: subjectsData } = useSubjects({ limit: 200 });
 
+  // A teacher's real classes and subjects come from their ClassSubject
+  // assignments (hierarchy subjects), not the subject catalogue.
+  const teacherLinks = useMemo(
+    () => classSubjectLinks.filter(
+      (link: any) => String(link.teacher || "") === String(user?.id) || String(link.teacher || "") === String((user as any)?.uid),
+    ),
+    [classSubjectLinks, user?.id, user],
+  );
+
   const availableClasses = useMemo(() => {
+    if (isTeacher) {
+      const teacherClasses = Array.from(new Set(teacherLinks.map((link: any) => link.class_name).filter(Boolean)));
+      if (teacherClasses.length) return teacherClasses as string[];
+    }
     const subjectList = subjectsData?.results || [];
-    const scopedSubjects = isTeacher
-      ? subjectList.filter((subject: any) => subject.teacher === user?.id || subject.teacher === user?.uid)
-      : subjectList;
-    const subjectClasses = scopedSubjects.flatMap((subject: any) => parseSubjectPlacement(subject.level));
+    const subjectClasses = subjectList.flatMap((subject: any) => parseSubjectPlacement(subject.level));
     const settingsClasses = schoolSettings?.class_levels || [];
     const relationalClasses = schoolClasses.map((cls) => cls.name).filter(Boolean);
     return Array.from(new Set([...relationalClasses, ...subjectClasses, ...settingsClasses].filter(Boolean)));
-  }, [isTeacher, schoolClasses, schoolSettings?.class_levels, subjectsData?.results, user?.id, user?.uid]);
+  }, [isTeacher, teacherLinks, schoolClasses, schoolSettings?.class_levels, subjectsData?.results]);
 
   const availableSubjects = useMemo(() => {
-    const subjectList = subjectsData?.results || [];
-    const scopedSubjects = isTeacher
-      ? subjectList.filter((subject: any) => subject.teacher === user?.id || subject.teacher === user?.uid)
-      : subjectList;
-
-    return scopedSubjects.filter((subject: any) => {
-      if (!selectedClass) return true;
-      const classes = parseSubjectPlacement(subject.level);
-      return classes.length === 0 || classes.includes(selectedClass);
+    if (!isTeacher) return [];
+    // Only the subjects this teacher teaches in the selected class.
+    const scoped = selectedClass
+      ? teacherLinks.filter((link: any) => String(link.class_name) === String(selectedClass))
+      : teacherLinks;
+    const byId = new Map<string, any>();
+    scoped.forEach((link: any) => {
+      if (!link.subject) return;
+      byId.set(String(link.subject), { id: String(link.subject), name: link.subject_name || "Subject" });
     });
-  }, [isTeacher, selectedClass, subjectsData?.results, user?.id, user?.uid]);
+    return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [isTeacher, selectedClass, teacherLinks]);
 
   useEffect(() => {
     if (!availableClasses.length) return;
@@ -178,6 +190,25 @@ export default function AttendancePage() {
     };
 
     loadSchoolClasses();
+  }, [schoolId, isTeacher, isAdmin]);
+
+  // Load the teacher/admin's class-subject assignments so a teacher can pick the
+  // exact subject they are taking attendance in.
+  useEffect(() => {
+    if (!schoolId || (!isTeacher && !isAdmin)) {
+      setClassSubjectLinks([]);
+      return;
+    }
+    const loadClassSubjects = async () => {
+      try {
+        const data = await schoolsService.getHierarchySubjects({ school_id: schoolId });
+        setClassSubjectLinks(Array.isArray(data) ? data : (data as any)?.results || []);
+      } catch (error) {
+        console.error("Error loading class-subject assignments for attendance:", error);
+        setClassSubjectLinks([]);
+      }
+    };
+    loadClassSubjects();
   }, [schoolId, isTeacher, isAdmin]);
 
   // Load attendance data based on role
@@ -218,7 +249,7 @@ export default function AttendancePage() {
           const absentData = await attendanceService.getAbsentToday();
           setAbsentToday(Array.isArray(absentData) ? absentData : absentData?.students || []);
         } else if (isParent) {
-          const data = await attendanceService.getAttendanceRecords({ limit: 500 });
+          const data = await attendanceService.getAttendanceRecords({ limit: 500, include_history: true } as any);
           const normalizedAttendance = Array.isArray(data) ? data : data?.results || [];
           setMyAttendance(normalizedAttendance);
           setStudentSummary(buildStudentAttendanceSummary(normalizedAttendance));

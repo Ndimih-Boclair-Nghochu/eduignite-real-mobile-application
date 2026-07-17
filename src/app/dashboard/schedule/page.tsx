@@ -17,7 +17,8 @@ import { useToast } from "@/hooks/use-toast";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import { gradesService } from "@/lib/api/services/grades.service";
 import { schoolsService } from "@/lib/api/services/schools.service";
-import type { HierarchyClass, HierarchyClassSubject, Subject, TimetableEntry, User } from "@/lib/api/types";
+import { studentsService } from "@/lib/api/services/students.service";
+import type { HierarchyClass, HierarchyClassSubject, Student, Subject, TimetableEntry, User } from "@/lib/api/types";
 import { useAuth } from "@/lib/auth-context";
 import { pdfGenerationService } from "@/lib/pdf-generation-service";
 import { cn } from "@/lib/utils";
@@ -112,6 +113,9 @@ export default function SchedulePage() {
   const schoolId = user?.school?.id || user?.school_id || user?.schoolId || "";
   const role = String(user?.role || "");
   const isAdmin = role === "SCHOOL_ADMIN" || role === "SUB_ADMIN";
+  const isTeacher = role === "TEACHER";
+  const isStudent = role === "STUDENT";
+  const isParent = role === "PARENT";
 
   const [form, setForm] = useState<TimetableForm>(EMPTY_FORM);
 
@@ -151,12 +155,20 @@ export default function SchedulePage() {
     enabled: Boolean(user?.id),
   });
 
+  // Parents view a separate timetable per child, so we need each child's class.
+  const childrenQuery = useQuery({
+    queryKey: ["timetable-children", schoolId],
+    queryFn: () => studentsService.getMyChildren(),
+    enabled: Boolean(user?.id) && isParent,
+  });
+
   const settings = settingsQuery.data;
   const classes = normalizeList<HierarchyClass>(classesQuery.data);
   const classSubjects = normalizeList<HierarchyClassSubject>(subjectsQuery.data);
   const subjectCatalog = normalizeList<Subject>(subjectCatalogQuery.data);
   const staff = normalizeList<User>(staffQuery.data).filter(isAcademicStaff);
   const entries = normalizeList<TimetableEntry>(timetableQuery.data);
+  const children = normalizeList<Student>(childrenQuery.data);
 
   const subjectNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -337,7 +349,7 @@ export default function SchedulePage() {
             <span className="rounded-xl bg-primary p-2 text-white shadow-lg">
               <CalendarDays className="h-6 w-6 text-secondary" />
             </span>
-            {isAdmin ? "School Timetable" : "My Timetable"}
+            {isAdmin ? "School Timetable" : isParent ? "Children's Timetables" : "My Timetable"}
           </h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             Cameroon secondary timetable periods for classes, subjects and assigned teachers. Published periods are visible to teachers, students and parents.
@@ -453,55 +465,53 @@ export default function SchedulePage() {
             <Button variant="outline" onClick={() => timetableQuery.refetch()}>Retry</Button>
           </CardContent>
         </Card>
-      ) : entries.length === 0 ? (
-        <Card className="border-none shadow-sm">
-          <CardContent className="flex min-h-48 flex-col items-center justify-center gap-3 text-center">
-            <Clock className="h-10 w-10 text-primary/20" />
-            <p className="font-bold text-primary">{isAdmin ? "No timetable periods have been drafted yet." : "No published timetable is available yet."}</p>
-            <p className="max-w-lg text-sm text-muted-foreground">
-              {isAdmin ? "Add periods above, then publish when the timetable is ready." : "Once the school admin publishes your class timetable, it will appear here."}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-5 xl:grid-cols-3">
-          {DAY_OPTIONS.map((day) => {
-            const dayEntries = grouped.get(day.value) ?? [];
-            return (
-              <Card key={day.value} className="border-none bg-white shadow-sm">
-                <CardHeader className="border-b">
-                  <CardTitle className="text-base font-black uppercase text-primary">{day.label}</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {dayEntries.length ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Time</TableHead>
-                          <TableHead>Class / Subject</TableHead>
-                          <TableHead>Status</TableHead>
-                          {isAdmin ? <TableHead className="text-right">Action</TableHead> : null}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {dayEntries.map((entry) => (
-                          <TableRow key={entry.id}>
-                            <TableCell className="whitespace-nowrap text-xs font-black text-primary">{formatTime(entry.start_time)}-{formatTime(entry.end_time)}</TableCell>
-                            <TableCell>
-                              <div className="space-y-1">
-                                <p className="text-xs font-black text-primary">{entry.subject_name || "Subject"}</p>
-                                <p className="text-[10px] font-bold text-muted-foreground">{entry.school_class_name}{entry.room ? ` | ${entry.room}` : ""}</p>
-                                <p className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
-                                  <UserIcon className="h-3 w-3" /> {entry.teacher_name || "Teacher pending"}
-                                </p>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={cn("border-none text-[8px] font-black uppercase", entry.status === "PUBLISHED" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
-                                {entry.status}
-                              </Badge>
-                            </TableCell>
-                            {isAdmin ? (
+      ) : isAdmin ? (
+        entries.length === 0 ? (
+          <Card className="border-none shadow-sm">
+            <CardContent className="flex min-h-48 flex-col items-center justify-center gap-3 text-center">
+              <Clock className="h-10 w-10 text-primary/20" />
+              <p className="font-bold text-primary">No timetable periods have been drafted yet.</p>
+              <p className="max-w-lg text-sm text-muted-foreground">Add periods above, then publish when the timetable is ready.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-5 xl:grid-cols-3">
+            {DAY_OPTIONS.map((day) => {
+              const dayEntries = grouped.get(day.value) ?? [];
+              return (
+                <Card key={day.value} className="border-none bg-white shadow-sm">
+                  <CardHeader className="border-b">
+                    <CardTitle className="text-base font-black uppercase text-primary">{day.label}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {dayEntries.length ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Time</TableHead>
+                            <TableHead>Class / Subject</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead className="text-right">Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {dayEntries.map((entry) => (
+                            <TableRow key={entry.id}>
+                              <TableCell className="whitespace-nowrap text-xs font-black text-primary">{formatTime(entry.start_time)}-{formatTime(entry.end_time)}</TableCell>
+                              <TableCell>
+                                <div className="space-y-1">
+                                  <p className="text-xs font-black text-primary">{entry.subject_name || "Subject"}</p>
+                                  <p className="text-[10px] font-bold text-muted-foreground">{entry.school_class_name}{entry.room ? ` | ${entry.room}` : ""}</p>
+                                  <p className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
+                                    <UserIcon className="h-3 w-3" /> {entry.teacher_name || "Teacher pending"}
+                                  </p>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={cn("border-none text-[8px] font-black uppercase", entry.status === "PUBLISHED" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
+                                  {entry.status}
+                                </Badge>
+                              </TableCell>
                               <TableCell className="text-right">
                                 <div className="flex justify-end gap-1">
                                   {entry.status === "PUBLISHED" ? (
@@ -516,19 +526,69 @@ export default function SchedulePage() {
                                   </Button>
                                 </div>
                               </TableCell>
-                            ) : null}
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <div className="py-10 text-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">No periods</div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <div className="py-10 text-center text-[10px] font-black uppercase tracking-widest text-muted-foreground">No periods</div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )
+      ) : isParent ? (
+        childrenQuery.isLoading ? (
+          <div className="flex h-64 items-center justify-center rounded-3xl border bg-white"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+        ) : children.length === 0 ? (
+          <Card className="border-none shadow-sm">
+            <CardContent className="flex min-h-48 flex-col items-center justify-center gap-3 text-center">
+              <Clock className="h-10 w-10 text-primary/20" />
+              <p className="font-bold text-primary">No linked children yet.</p>
+              <p className="max-w-lg text-sm text-muted-foreground">Once your children are linked and their class timetable is published, each child&apos;s timetable will appear here separately.</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-8">
+            {children.map((child) => {
+              const childClass = child.school_class_name || child.student_class || "";
+              const childEntries = entries.filter((entry) =>
+                (Boolean(child.school_class) && String(entry.school_class) === String(child.school_class))
+                || (Boolean(childClass) && String(entry.school_class_name || "") === String(childClass)),
+              );
+              return (
+                <Card key={child.id} className="border-none bg-white shadow-sm">
+                  <CardHeader className="flex flex-row items-center gap-3 border-b">
+                    <span className="rounded-xl bg-primary/10 p-2 text-primary"><UserIcon className="h-5 w-5" /></span>
+                    <div>
+                      <CardTitle className="text-base font-black uppercase text-primary">{child.user?.name || "Child"}</CardTitle>
+                      <p className="text-xs font-bold text-muted-foreground">{childClass || "Class not assigned"}</p>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4">
+                    <WeeklyTimetable entries={childEntries} variant="student" />
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )
+      ) : entries.length === 0 ? (
+        <Card className="border-none shadow-sm">
+          <CardContent className="flex min-h-48 flex-col items-center justify-center gap-3 text-center">
+            <Clock className="h-10 w-10 text-primary/20" />
+            <p className="font-bold text-primary">No published timetable is available yet.</p>
+            <p className="max-w-lg text-sm text-muted-foreground">Once the school admin publishes your class timetable, it will appear here.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-none bg-white shadow-sm">
+          <CardContent className="p-4">
+            <WeeklyTimetable entries={entries} variant={isTeacher ? "teacher" : "student"} />
+          </CardContent>
+        </Card>
       )}
     </div>
   );
@@ -539,6 +599,77 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     <div className="space-y-2">
       <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</Label>
       {children}
+    </div>
+  );
+}
+
+// A professional weekly timetable grid: time-slot rows × day columns. Each cell
+// shows the subject with the class (teacher view) or the teacher (student view)
+// plus the room. Real data from the published TimetableEntry feed.
+function WeeklyTimetable({ entries, variant }: { entries: TimetableEntry[]; variant: "teacher" | "student" }) {
+  const slots = useMemo(() => {
+    const map = new Map<string, { start: string; end: string }>();
+    entries.forEach((entry) => {
+      map.set(`${entry.start_time}|${entry.end_time}`, { start: entry.start_time, end: entry.end_time });
+    });
+    return Array.from(map.values()).sort((a, b) => a.start.localeCompare(b.start));
+  }, [entries]);
+
+  const days = useMemo(() => {
+    const hasSaturday = entries.some((entry) => Number(entry.day_of_week) === 6);
+    return DAY_OPTIONS.filter((day) => day.value <= 5 || hasSaturday);
+  }, [entries]);
+
+  if (!entries.length) {
+    return (
+      <div className="flex min-h-32 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed py-10 text-center">
+        <Clock className="h-8 w-8 text-primary/20" />
+        <p className="text-sm font-bold text-muted-foreground">No published periods yet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-2xl border shadow-sm">
+      <table className="w-full min-w-[720px] border-collapse text-sm">
+        <thead>
+          <tr className="bg-primary text-white">
+            <th className="sticky left-0 z-10 bg-primary px-4 py-3 text-left text-[11px] font-black uppercase tracking-widest">Time</th>
+            {days.map((day) => (
+              <th key={day.value} className="border-l border-white/10 px-3 py-3 text-center text-[11px] font-black uppercase tracking-widest">{day.label}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {slots.map((slot, index) => (
+            <tr key={`${slot.start}-${slot.end}`} className={cn(index % 2 === 1 ? "bg-accent/5" : "bg-white")}>
+              <td className={cn("sticky left-0 z-10 whitespace-nowrap border-t px-4 py-3 text-xs font-black text-primary", index % 2 === 1 ? "bg-accent/5" : "bg-white")}>
+                {formatTime(slot.start)} <span className="text-muted-foreground">–</span> {formatTime(slot.end)}
+              </td>
+              {days.map((day) => {
+                const cells = entries.filter(
+                  (entry) => Number(entry.day_of_week) === day.value && entry.start_time === slot.start && entry.end_time === slot.end,
+                );
+                return (
+                  <td key={day.value} className="border-l border-t px-2 py-2 align-top">
+                    {cells.length ? (
+                      cells.map((entry) => (
+                        <div key={entry.id} className="mb-1 rounded-lg border border-primary/10 bg-primary/5 px-2.5 py-1.5 last:mb-0">
+                          <p className="text-xs font-black leading-tight text-primary">{entry.subject_name || "Subject"}</p>
+                          <p className="text-[10px] font-bold text-muted-foreground">{variant === "teacher" ? (entry.school_class_name || "Class") : (entry.teacher_name || "Teacher")}</p>
+                          {entry.room ? <p className="mt-0.5 text-[9px] font-black uppercase tracking-wide text-secondary">{entry.room}</p> : null}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="py-2 text-center text-[10px] text-muted-foreground/30">—</div>
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

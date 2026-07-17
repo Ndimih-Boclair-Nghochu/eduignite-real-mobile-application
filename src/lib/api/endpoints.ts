@@ -197,8 +197,6 @@ export const API = {
     REVENUE_REPORT: '/fees/payments/revenue_report/',
     FINANCIAL_OVERVIEW: '/fees/payments/financial_overview/',
     OUTSTANDING: '/fees/payments/outstanding_fees/',
-    CAMPAY_COLLECT: '/fees/campay/collect/',
-    CAMPAY_STATUS: (reference: string) => `/fees/campay/status/${reference}/`,
     RECEIPT: (id: string) => `/fees/payments/${id}/generate_receipt/`,
     INVOICES: '/fees/invoices/',
     INVOICE_DETAIL: (id: string) => `/fees/invoices/${id}/`,

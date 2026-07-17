@@ -79,22 +79,6 @@ export const feesService = {
     return data;
   },
 
-  async campayCollect(payload: {
-    purpose: "platform_charge" | "fee_structure";
-    phone: string;
-    student_id?: string;
-    fee_structure?: string;
-    amount?: string | number;
-  }): Promise<any> {
-    const { data } = await apiClient.post(API.FEES.CAMPAY_COLLECT, payload);
-    return data;
-  },
-
-  async campayStatus(externalReference: string): Promise<any> {
-    const { data } = await apiClient.get(API.FEES.CAMPAY_STATUS(externalReference));
-    return data;
-  },
-
   async getOutstandingFees(params?: ListParams): Promise<PaginatedResponse<any>> {
     const { data } = await apiClient.get(API.FEES.OUTSTANDING, { params });
     return data;

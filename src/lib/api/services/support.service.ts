@@ -45,4 +45,15 @@ export const supportService = {
     const { data } = await apiClient.get(API.SUPPORT.STATS);
     return data;
   },
+
+  // Charge a support contribution via PayUnit mobile money, then poll its status.
+  async collectSupport(payload: { amount: number | string; phone: string; operator?: string; message?: string }): Promise<any> {
+    const { data } = await apiClient.post(API.SUPPORT.COLLECT, payload);
+    return data;
+  },
+
+  async supportPaymentStatus(transactionId: string): Promise<any> {
+    const { data } = await apiClient.get(API.SUPPORT.PAYMENT_STATUS(transactionId));
+    return data;
+  },
 };

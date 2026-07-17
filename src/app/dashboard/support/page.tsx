@@ -1,14 +1,17 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import {
   Heart,
   Coins,
@@ -104,6 +107,57 @@ export default function SupportLedgerPage() {
   const processOrderMutation = useProcessOrder();
   const verifyContribMutation = useVerifyContribution();
 
+  // Contribute to EduIgnite via PayUnit mobile money.
+  const CONTRIB_OPERATORS = [
+    { value: "mtn_momo", label: "MTN MoMo" },
+    { value: "orange_money", label: "Orange Money" },
+  ];
+  const [contributeOpen, setContributeOpen] = useState(false);
+  const [cAmount, setCAmount] = useState("");
+  const [cOperator, setCOperator] = useState("mtn_momo");
+  const [cPhone, setCPhone] = useState("");
+  const [cMessage, setCMessage] = useState("");
+  const [cTxn, setCTxn] = useState<any | null>(null);
+  const [cStarting, setCStarting] = useState(false);
+  const cPoll = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopCPoll = () => { if (cPoll.current) { clearInterval(cPoll.current); cPoll.current = null; } };
+  useEffect(() => stopCPoll, []);
+
+  const startContribute = async () => {
+    const amt = Number(cAmount);
+    if (!amt || amt <= 0) { toast({ variant: "destructive", title: "Amount required", description: "Enter a valid amount." }); return; }
+    if (!cPhone.trim()) { toast({ variant: "destructive", title: "Phone required", description: "Enter the mobile money number." }); return; }
+    setCStarting(true);
+    try {
+      const created = await supportService.collectSupport({ amount: amt, phone: cPhone.trim(), operator: cOperator, message: cMessage });
+      setCTxn(created);
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Mobile money failed", description: error?.response?.data?.detail || "Could not start the request." });
+    } finally {
+      setCStarting(false);
+    }
+  };
+
+  useEffect(() => {
+    stopCPoll();
+    if (!cTxn?.transaction_id || cTxn.status !== "PENDING") return;
+    cPoll.current = setInterval(async () => {
+      try {
+        const updated = await supportService.supportPaymentStatus(cTxn.transaction_id);
+        if (updated.status === "SUCCESS") {
+          stopCPoll(); setCTxn(null); setContributeOpen(false); setCAmount(""); setCPhone(""); setCMessage("");
+          refetchContrib();
+          toast({ title: "Thank you!", description: "Your contribution was received." });
+        } else if (updated.status === "FAILED" || updated.status === "CANCELLED") {
+          stopCPoll(); setCTxn(updated);
+          toast({ variant: "destructive", title: "Payment not completed", description: "The mobile money payment was not completed." });
+        }
+      } catch { /* keep polling */ }
+    }, 4000);
+    return stopCPoll;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cTxn?.transaction_id, cTxn?.status]);
+
   const handleAdvanceOrder = async (order: any) => {
     const nextStatus = ORDER_STATUS_CYCLE[order.status] ?? "contacted";
     try {
@@ -140,6 +194,61 @@ export default function SupportLedgerPage() {
           </p>
         </div>
       </div>
+
+      <Card className="border-none bg-primary text-white shadow-xl rounded-[2rem] overflow-hidden">
+        <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="flex items-center gap-2 text-lg font-black uppercase tracking-tight"><Heart className="h-5 w-5 text-secondary" /> Support EduIgnite</p>
+            <p className="mt-1 max-w-xl text-sm text-white/70">Contribute to the platform through MTN or Orange mobile money. Every contribution keeps EduIgnite running.</p>
+          </div>
+          <Button onClick={() => { setContributeOpen(true); setCTxn(null); setCPhone(""); setCAmount(""); }} className="h-11 gap-2 rounded-xl bg-white font-black text-primary hover:bg-white/90">
+            <Smartphone className="h-4 w-4" /> Contribute
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Dialog open={contributeOpen} onOpenChange={(open) => { if (!open) { setContributeOpen(false); setCTxn(null); stopCPoll(); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-primary"><Heart className="h-5 w-5 text-secondary" /> Support EduIgnite</DialogTitle>
+            <DialogDescription>Contribute via mobile money. You&apos;ll approve the payment on your phone.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Amount (XAF)</Label>
+              <Input type="number" value={cAmount} onChange={(e) => setCAmount(e.target.value)} placeholder="e.g. 5000" className="h-11 rounded-xl" disabled={cTxn?.status === "PENDING"} />
+            </div>
+            <div className="space-y-2">
+              <Label>Mobile Money</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {CONTRIB_OPERATORS.map((op) => (
+                  <button key={op.value} type="button" onClick={() => setCOperator(op.value)} className={cn("rounded-xl border p-3 text-sm font-black transition-all", cOperator === op.value ? "border-primary bg-primary/5 ring-1 ring-primary text-primary" : "hover:bg-accent/20")}>{op.label}</button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>{cOperator === "orange_money" ? "Orange" : "MTN"} Money Number</Label>
+              <Input value={cPhone} onChange={(e) => setCPhone(e.target.value)} placeholder="6XXXXXXXX" className="h-11 rounded-xl" disabled={cTxn?.status === "PENDING"} />
+            </div>
+            <div className="space-y-2">
+              <Label>Message (optional)</Label>
+              <Input value={cMessage} onChange={(e) => setCMessage(e.target.value)} placeholder="A word of encouragement" className="h-11 rounded-xl" />
+            </div>
+            {cTxn?.status === "PENDING" ? (
+              <div className="flex items-center gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm font-semibold text-primary"><Loader2 className="h-5 w-5 animate-spin" /> Approve the payment on the phone. Waiting for confirmation...</div>
+            ) : null}
+            {cTxn?.status === "FAILED" || cTxn?.status === "CANCELLED" ? (
+              <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">The payment was not completed. You can try again.</div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setContributeOpen(false); setCTxn(null); stopCPoll(); }}>Close</Button>
+            <Button onClick={startContribute} disabled={cStarting || cTxn?.status === "PENDING"} className="gap-2">
+              {cStarting || cTxn?.status === "PENDING" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Smartphone className="h-4 w-4" />} Contribute
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Tabs defaultValue="orders" className="w-full">
         <TabsList className="grid grid-cols-2 w-full md:w-[400px] mb-8 bg-white shadow-sm border h-auto p-1 rounded-2xl">

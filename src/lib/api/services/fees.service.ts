@@ -41,6 +41,21 @@ export const feesService = {
     await apiClient.delete(API.FEES.STRUCTURE_DETAIL(id));
   },
 
+  // Initiate a PayUnit mobile-money collection for the platform subscription.
+  async payunitCollect(payload: {
+    phone: string;
+    operator?: string;
+    student_id?: string;
+  }): Promise<any> {
+    const { data } = await apiClient.post(API.FEES.PAYUNIT_COLLECT, payload);
+    return data;
+  },
+
+  async payunitStatus(transactionId: string): Promise<any> {
+    const { data } = await apiClient.get(API.FEES.PAYUNIT_STATUS(transactionId));
+    return data;
+  },
+
   async getPayments(params?: ListParams): Promise<PaginatedResponse<Payment>> {
     const { data } = await apiClient.get(API.FEES.PAYMENTS, { params });
     return data;

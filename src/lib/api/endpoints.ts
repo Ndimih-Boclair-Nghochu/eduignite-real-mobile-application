@@ -189,6 +189,8 @@ export const API = {
     STRUCTURES: '/fees/fee-structures/',
     STRUCTURE_DETAIL: (id: string) => `/fees/fee-structures/${id}/`,
     MY_FEES: '/fees/fee-structures/my-fees/',
+    PAYUNIT_COLLECT: '/fees/payunit/collect/',
+    PAYUNIT_STATUS: (transactionId: string) => `/fees/payunit/status/${transactionId}/`,
     PAYMENTS: '/fees/payments/',
     PAYMENT_DETAIL: (id: string) => `/fees/payments/${id}/`,
     MY_PAYMENTS: '/fees/payments/my_payments/',
@@ -289,6 +291,8 @@ export const API = {
     VERIFY: (id: string) => `/support/contributions/${id}/verify/`,
     REJECT: (id: string) => `/support/contributions/${id}/reject/`,
     STATS: '/support/contributions/stats/',
+    COLLECT: '/support/contributions/collect/',
+    PAYMENT_STATUS: (transactionId: string) => `/support/contributions/payment-status/${transactionId}/`,
   },
   STAFF_REMARKS: {
     BASE: '/staff-remarks/remarks/',

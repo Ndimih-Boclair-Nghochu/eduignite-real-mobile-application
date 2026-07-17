@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -28,6 +28,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useI18n } from "@/lib/i18n-context";
 import { usePlatformFees } from "@/lib/hooks/usePlatform";
 import { useCreatePayment, useMyPayments } from "@/lib/hooks/useFees";
+import { feesService } from "@/lib/api/services/fees.service";
 import { getLicenseAccessState } from "@/lib/license";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import { resolveMediaUrl } from "@/lib/media";
@@ -72,6 +73,10 @@ export default function SubscriptionPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [issuedReceipt, setIssuedReceipt] = useState<any>(null);
   const [paymentData, setPaymentData] = useState({ method: "mtn", number: "" });
+  const [txn, setTxn] = useState<any | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopPolling = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+  useEffect(() => stopPolling, []);
 
   const liveFees: Record<string, string> = {};
   const feeRows = (platformFeesData as any)?.results ?? [];
@@ -113,34 +118,58 @@ export default function SubscriptionPage() {
     }
 
     setIsProcessing(true);
+    setTxn(null);
     try {
-      const payment = await createPaymentMutation.mutateAsync({
-        amount: userFee,
-        currency: "XAF",
-        payment_method: "mobile_money",
-        payment_date: new Date().toISOString().slice(0, 10),
-        notes: `${paymentData.method.toUpperCase()} ${paymentData.number}`,
-        mark_license_paid: true,
-      });
-      await markLicensePaid();
-      setIssuedReceipt(buildReceiptFromPayment(payment));
+      // Real mobile-money payment through PayUnit for this user's own subscription.
+      const operator = paymentData.method === "orange" ? "orange_money" : "mtn_momo";
+      const created = await feesService.payunitCollect({ phone: paymentData.number.trim(), operator });
+      setTxn(created);
       toast({
-        title: language === "en" ? "Payment Recorded" : "Paiement Enregistre",
-        description:
-          language === "en"
-            ? "Your annual institutional license has been activated and the receipt is ready."
-            : "Votre licence institutionnelle annuelle a ete activee et le recu est pret.",
+        title: language === "en" ? "Approve on your phone" : "Approuvez sur votre telephone",
+        description: language === "en" ? "A mobile money prompt has been sent. Waiting for confirmation..." : "Une invite mobile money a ete envoyee. En attente de confirmation...",
       });
     } catch (error) {
+      setIsProcessing(false);
       toast({
         variant: "destructive",
         title: language === "en" ? "Payment Failed" : "Paiement Echoue",
-        description: getApiErrorMessage(error, language === "en" ? "We could not record your subscription payment." : "Nous n'avons pas pu enregistrer votre paiement."),
+        description: getApiErrorMessage(error, language === "en" ? "We could not start your subscription payment." : "Nous n'avons pas pu demarrer votre paiement."),
       });
-    } finally {
-      setIsProcessing(false);
     }
   };
+
+  // Poll PayUnit until the subscription payment resolves, then activate + receipt.
+  useEffect(() => {
+    stopPolling();
+    if (!txn?.transaction_id || txn.status !== "PENDING") return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const updated = await feesService.payunitStatus(txn.transaction_id);
+        if (updated.status === "SUCCESS") {
+          stopPolling();
+          setTxn(null);
+          setIsProcessing(false);
+          await markLicensePaid();
+          setIssuedReceipt(buildReceiptFromPayment(updated.payment));
+          toast({
+            title: language === "en" ? "Payment Successful" : "Paiement Reussi",
+            description: language === "en" ? "Your annual license is now active and the receipt is ready." : "Votre licence annuelle est maintenant active et le recu est pret.",
+          });
+        } else if (updated.status === "FAILED" || updated.status === "CANCELLED") {
+          stopPolling();
+          setTxn(null);
+          setIsProcessing(false);
+          toast({
+            variant: "destructive",
+            title: language === "en" ? "Payment Not Completed" : "Paiement Non Termine",
+            description: language === "en" ? "The mobile money payment was not completed. Please try again." : "Le paiement mobile money n'a pas ete complete. Veuillez reessayer.",
+          });
+        }
+      } catch { /* keep polling */ }
+    }, 4000);
+    return stopPolling;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txn?.transaction_id, txn?.status]);
 
   const handleGenerateReceipt = () => {
     if (paymentStatus === "waived") {

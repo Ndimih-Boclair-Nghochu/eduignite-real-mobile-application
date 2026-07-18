@@ -113,26 +113,37 @@ export function Subscription() {
     }
   };
 
+  // Immediate first check + 2.5s interval so instant/sandbox approvals confirm fast.
   useEffect(() => {
     stopPolling();
-    if (!txn?.transaction_id || txn.status !== "PENDING") return;
-    pollRef.current = setInterval(async () => {
+    if (!txn?.transaction_id) return;
+
+    const succeed = async () => {
+      stopPolling();
+      setTxn(null);
+      setPaying(null);
+      setPhone("");
+      await queryClient.invalidateQueries({ queryKey: ["subscription-students"] });
+      toast({ title: "Subscription paid", description: "Payment received and the student's account is now active." });
+    };
+
+    if (txn.status === "SUCCESS") { void succeed(); return; }
+    if (txn.status !== "PENDING") return;
+
+    const tick = async () => {
       try {
         const updated = await feesService.payunitStatus(txn.transaction_id);
         if (updated.status === "SUCCESS") {
-          stopPolling();
-          setTxn(null);
-          setPaying(null);
-          setPhone("");
-          await queryClient.invalidateQueries({ queryKey: ["subscription-students"] });
-          toast({ title: "Subscription paid", description: "Payment received and the student's account is now active." });
+          void succeed();
         } else if (updated.status === "FAILED" || updated.status === "CANCELLED") {
           stopPolling();
           setTxn(updated);
           toast({ variant: "destructive", title: "Payment not completed", description: updated.reason || "The mobile money payment was not completed." });
         }
       } catch { /* keep polling */ }
-    }, 4000);
+    };
+    void tick();
+    pollRef.current = setInterval(tick, 2500);
     return stopPolling;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [txn?.transaction_id, txn?.status]);

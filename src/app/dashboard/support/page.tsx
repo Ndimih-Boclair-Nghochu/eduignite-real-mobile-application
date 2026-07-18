@@ -140,20 +140,30 @@ export default function SupportLedgerPage() {
 
   useEffect(() => {
     stopCPoll();
-    if (!cTxn?.transaction_id || cTxn.status !== "PENDING") return;
-    cPoll.current = setInterval(async () => {
+    if (!cTxn?.transaction_id) return;
+
+    const succeed = () => {
+      stopCPoll(); setCTxn(null); setContributeOpen(false); setCAmount(""); setCPhone(""); setCMessage("");
+      refetchContrib();
+      toast({ title: "Thank you!", description: "Your contribution was received." });
+    };
+
+    if (cTxn.status === "SUCCESS") { succeed(); return; }
+    if (cTxn.status !== "PENDING") return;
+
+    const tick = async () => {
       try {
         const updated = await supportService.supportPaymentStatus(cTxn.transaction_id);
         if (updated.status === "SUCCESS") {
-          stopCPoll(); setCTxn(null); setContributeOpen(false); setCAmount(""); setCPhone(""); setCMessage("");
-          refetchContrib();
-          toast({ title: "Thank you!", description: "Your contribution was received." });
+          succeed();
         } else if (updated.status === "FAILED" || updated.status === "CANCELLED") {
           stopCPoll(); setCTxn(updated);
           toast({ variant: "destructive", title: "Payment not completed", description: "The mobile money payment was not completed." });
         }
       } catch { /* keep polling */ }
-    }, 4000);
+    };
+    void tick();
+    cPoll.current = setInterval(tick, 2500);
     return stopCPoll;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cTxn?.transaction_id, cTxn?.status]);

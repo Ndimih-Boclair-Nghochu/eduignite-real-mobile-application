@@ -124,10 +124,12 @@ export default function SubscriptionPage() {
       const operator = paymentData.method === "orange" ? "orange_money" : "mtn_momo";
       const created = await feesService.payunitCollect({ phone: paymentData.number.trim(), operator });
       setTxn(created);
-      toast({
-        title: language === "en" ? "Approve on your phone" : "Approuvez sur votre telephone",
-        description: language === "en" ? "A mobile money prompt has been sent. Waiting for confirmation..." : "Une invite mobile money a ete envoyee. En attente de confirmation...",
-      });
+      if (created?.status !== "SUCCESS") {
+        toast({
+          title: language === "en" ? "Approve on your phone" : "Approuvez sur votre telephone",
+          description: language === "en" ? "A mobile money prompt has been sent. Waiting for confirmation..." : "Une invite mobile money a ete envoyee. En attente de confirmation...",
+        });
+      }
     } catch (error) {
       setIsProcessing(false);
       toast({
@@ -139,22 +141,33 @@ export default function SubscriptionPage() {
   };
 
   // Poll PayUnit until the subscription payment resolves, then activate + receipt.
+  // Immediate first check + 2.5s interval so instant/sandbox approvals confirm fast.
   useEffect(() => {
     stopPolling();
-    if (!txn?.transaction_id || txn.status !== "PENDING") return;
-    pollRef.current = setInterval(async () => {
+    if (!txn?.transaction_id) return;
+
+    const finish = async (updated: any) => {
+      stopPolling();
+      setTxn(null);
+      setIsProcessing(false);
+      try { await markLicensePaid(); } catch { /* auth refresh best-effort */ }
+      setIssuedReceipt(buildReceiptFromPayment(updated?.payment));
+      toast({
+        title: language === "en" ? "Payment Successful" : "Paiement Reussi",
+        description: language === "en" ? "Your annual license is now active and the receipt is ready." : "Votre licence annuelle est maintenant active et le recu est pret.",
+      });
+    };
+
+    if (txn.status === "SUCCESS") { void finish(txn); return; }
+    if (txn.status !== "PENDING") { setIsProcessing(false); return; }
+
+    let tries = 0;
+    const tick = async () => {
+      tries += 1;
       try {
         const updated = await feesService.payunitStatus(txn.transaction_id);
         if (updated.status === "SUCCESS") {
-          stopPolling();
-          setTxn(null);
-          setIsProcessing(false);
-          await markLicensePaid();
-          setIssuedReceipt(buildReceiptFromPayment(updated.payment));
-          toast({
-            title: language === "en" ? "Payment Successful" : "Paiement Reussi",
-            description: language === "en" ? "Your annual license is now active and the receipt is ready." : "Votre licence annuelle est maintenant active et le recu est pret.",
-          });
+          void finish(updated);
         } else if (updated.status === "FAILED" || updated.status === "CANCELLED") {
           stopPolling();
           setTxn(null);
@@ -166,7 +179,10 @@ export default function SubscriptionPage() {
           });
         }
       } catch { /* keep polling */ }
-    }, 4000);
+      if (tries >= 80) { stopPolling(); setIsProcessing(false); }
+    };
+    void tick();
+    pollRef.current = setInterval(tick, 2500);
     return stopPolling;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [txn?.transaction_id, txn?.status]);

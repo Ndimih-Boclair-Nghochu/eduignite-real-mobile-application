@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -30,11 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { BookOpen, ChevronDown, Eye, FileText, KeyRound, Link2, Loader2, Plus, Search, Sparkles, Upload, UserPlus, Users } from "lucide-react";
-import { apiClient } from "@/lib/api/client";
-import { generateBrandedTablePdf } from "@/lib/pdf-branded";
-import { usePagination, DataPagination } from "@/components/ui/data-pagination";
-import { UserModerationControls } from "@/components/dashboard/user-moderation";
+import { BookOpen, ChevronDown, Eye, FileText, Link2, Loader2, Plus, Search, Sparkles, Upload, UserPlus, Users } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type {
   BulkStudentUploadRequest,
@@ -50,6 +46,9 @@ import type {
 } from "@/lib/api/types";
 import { schoolsService } from "@/lib/api/services/schools.service";
 import { studentsService } from "@/lib/api/services/students.service";
+import { generateBrandedTablePdf } from "@/lib/pdf-branded";
+import { usePagination, DataPagination } from "@/components/ui/data-pagination";
+import { UserModerationControls } from "@/components/dashboard/user-moderation";
 
 const GENDER_OPTIONS = [
   { value: "male", label: "Male" },
@@ -331,29 +330,6 @@ export default function StudentsPage() {
   const { toast } = useToast();
   const currentSchoolId = getUserSchoolId(user);
   const canManageStudentAdmissions = canManageStudentAdmissionsForRole(user?.role);
-  const isAdminRole = canManageStudentAdmissions;
-  // Password help: stored passwords are hashed, so the admin resets a
-  // forgotten one and gets the new value to share with the student.
-  const [resetPasswordTarget, setResetPasswordTarget] = useState<any | null>(null);
-  const [resetPasswordResult, setResetPasswordResult] = useState<string | null>(null);
-  const [isResettingPassword, setIsResettingPassword] = useState(false);
-  const handleResetPassword = async () => {
-    const userId = resetPasswordTarget?.user?.id;
-    if (!userId) return;
-    setIsResettingPassword(true);
-    try {
-      const { data } = await apiClient.post(`/users/${userId}/admin-reset-password/`, {});
-      setResetPasswordResult(String(data?.password || ""));
-    } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Reset failed",
-        description: error?.response?.data?.detail || "The password could not be reset right now.",
-      });
-    } finally {
-      setIsResettingPassword(false);
-    }
-  };
   const [searchTerm, setSearchTerm] = useState("");
   const [adminSubSchoolFilter, setAdminSubSchoolFilter] = useState("all");
   const [adminClassFilter, setAdminClassFilter] = useState("all");
@@ -367,6 +343,8 @@ export default function StudentsPage() {
   const [isLinkingAdmissionGuardian, setIsLinkingAdmissionGuardian] = useState(false);
   const [viewingStudent, setViewingStudent] = useState<RegistryStudentCard | null>(null);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [editPhotoPreview, setEditPhotoPreview] = useState<string>("");
   const [editData, setEditData] = useState<UpdateStudentRequest>({});
   const [linkingStudent, setLinkingStudent] = useState<Student | null>(null);
   const [linkParentData, setLinkParentData] = useState<LinkParentRequest>(emptyParentLinkForm);
@@ -764,7 +742,8 @@ export default function StudentsPage() {
 
   useEffect(() => {
     if (editingStudent) {
-      setEditData({
+      setEditPhotoPreview("");
+setEditData({
         name: editingStudent.user?.name ?? "",
         email: editingStudent.user?.email ?? "",
         phone: editingStudent.user?.phone ?? "",
@@ -1112,8 +1091,7 @@ export default function StudentsPage() {
   };
 
   // Build a well-styled, branded PDF activation sheet from the generated
-  // matricules (never an HTML dump). Works on web/desktop and saves into the
-  // device eduignite folder on the mobile app.
+  // matricules (never an HTML dump).
   const downloadActivationPdf = (students: any[], className: string) => {
     const rows = (students || []).filter(Boolean);
     if (rows.length === 0) {
@@ -1205,6 +1183,7 @@ export default function StudentsPage() {
       });
       return;
     }
+
     if (bulkGenerated && !bulkData.file) {
       toast({
         variant: "destructive",
@@ -1243,6 +1222,24 @@ export default function StudentsPage() {
       });
     } finally {
       setIsBulkSubmitting(false);
+    }
+  };
+
+  const handleUploadStudentPhoto = async (file: File | undefined | null) => {
+    if (!file || !editingStudent) return;
+    setUploadingPhoto(true);
+    try {
+      const result = await studentsService.uploadStudentPhoto(String(editingStudent.id), file);
+      setEditPhotoPreview(result.avatar || "");
+      toast({ title: "Photo updated", description: "The student's profile picture was uploaded successfully." });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Photo upload failed",
+        description: error?.response?.data?.detail || "The photo could not be uploaded. Use a clear image under 6MB.",
+      });
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -1818,45 +1815,9 @@ export default function StudentsPage() {
                     Showing {filteredRegistryCards.length} of {registryCards.length} learner{registryCards.length === 1 ? "" : "s"} from the current school registry.
                   </CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
-                  {isAdminRole ? (
-                    <Button
-                      variant="outline"
-                      className="gap-2 rounded-xl border-primary/20 font-bold text-primary"
-                      onClick={() => {
-                        const subSchoolLabel =
-                          adminSubSchoolFilter === "all"
-                            ? "All sub-schools"
-                            : subSchools.find((s: any) => s.id === adminSubSchoolFilter)?.name || "Sub-school";
-                        const classLabel =
-                          adminClassFilter === "all"
-                            ? "All classes"
-                            : filteredAdminClassOptions.find((c: any) => c.id === adminClassFilter)?.name || "Class";
-                        generateBrandedTablePdf({
-                          title: "Student List",
-                          subtitle: `${subSchoolLabel} â€¢ ${classLabel} â€¢ ${filteredRegistryCards.length} students`,
-                          schoolName: user?.school?.name || "EduIgnite",
-                          columns: ["#", "Student Name", "Matricule", "Admission No.", "Class", "Gender"],
-                          rows: filteredRegistryCards.map((s: any, i: number) => [
-                            i + 1,
-                            registryStudentName(s),
-                            s.user?.matricule || "â€”",
-                            s.admissionNumber || "â€”",
-                            s.className || s.studentClass || "â€”",
-                            s.gender || "â€”",
-                          ]),
-                          fileName: `student-list-${classLabel.replace(/\s+/g, "-").toLowerCase()}`,
-                          footnote: `Total: ${filteredRegistryCards.length} student(s)`,
-                        });
-                      }}
-                    >
-                      <FileText className="h-4 w-4" /> Download PDF
-                    </Button>
-                  ) : null}
-                  <Badge variant="outline" className="w-fit border-primary/10 px-3 py-1 text-[10px] font-black uppercase text-primary">
-                    Tabular view
-                  </Badge>
-                </div>
+                <Badge variant="outline" className="w-fit border-primary/10 px-3 py-1 text-[10px] font-black uppercase text-primary">
+                  Tabular view
+                </Badge>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -1968,18 +1929,7 @@ export default function StudentsPage() {
                               <Eye className="mr-2 h-4 w-4" />
                               View
                             </Button>
-                            {isAdminRole && student.user?.id ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-9 rounded-xl border-amber-300 font-bold text-amber-700"
-                                onClick={() => setResetPasswordTarget(student)}
-                              >
-                                <KeyRound className="mr-2 h-4 w-4" />
-                                Password
-                              </Button>
-                            ) : null}
-                            {isAdminRole && student.user?.id ? (
+                            {canManageStudentAdmissions && student.user?.id ? (
                               <UserModerationControls
                                 user={student.user}
                                 onChanged={() => { void studentsQuery.refetch(); }}
@@ -2040,7 +1990,7 @@ export default function StudentsPage() {
                         {student.user?.name}
                       </CardTitle>
                       <CardDescription className="mt-1 text-xs">
-                        {student.user?.email || "No email"} Â· {student.admission_number}
+                        {student.user?.email || "No email"} · {student.admission_number}
                       </CardDescription>
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Badge variant="outline" className="border-primary/10 text-[10px] font-bold uppercase text-primary">
@@ -2080,7 +2030,7 @@ export default function StudentsPage() {
                         <div className="mt-3 flex flex-wrap gap-2">
                           {student.parent_links.map((link) => (
                             <Badge key={link.id} variant="outline" className="border-primary/10 px-3 py-1 text-[10px] font-bold uppercase text-primary">
-                              {link.parent_name} â€¢ {formatHierarchyValue(link.relationship)}{link.is_primary ? " â€¢ Primary" : ""}
+                              {link.parent_name} • {formatHierarchyValue(link.relationship)}{link.is_primary ? " • Primary" : ""}
                             </Badge>
                           ))}
                         </div>
@@ -2208,7 +2158,7 @@ export default function StudentsPage() {
                           {parent.name}
                         </CardTitle>
                         <CardDescription className="mt-1 text-xs">
-                          {parent.email || "No email"} Â· {parent.matricule || "Pending matricule"}
+                          {parent.email || "No email"} · {parent.matricule || "Pending matricule"}
                         </CardDescription>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Badge variant="outline" className="border-primary/10 text-[10px] font-bold uppercase text-primary">
@@ -2227,7 +2177,7 @@ export default function StudentsPage() {
                           <div className="mt-3 flex flex-wrap gap-2">
                             {linkedChildren.map((student) => (
                               <Badge key={`${parent.id}-${student.id}`} variant="outline" className="border-primary/10 px-3 py-1 text-[10px] font-bold uppercase text-primary">
-                                {student.user?.name} Â· {student.school_class_name || student.student_class}
+                                {student.user?.name} · {student.school_class_name || student.student_class}
                               </Badge>
                             ))}
                           </div>
@@ -2277,7 +2227,7 @@ export default function StudentsPage() {
                     <div>
                       <p className="font-bold text-primary">{student.user?.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {student.student_class} Â· {student.admission_number}
+                        {student.student_class} · {student.admission_number}
                       </p>
                     </div>
                     <Badge className="bg-green-100 text-green-700">{student.annual_average}/20</Badge>
@@ -2580,7 +2530,7 @@ export default function StudentsPage() {
                       >
                         <p className="font-bold text-primary">{parent.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {[parent.matricule, parent.phone, parent.email].filter(Boolean).join(" Â· ") || "Parent account"}
+                          {[parent.matricule, parent.phone, parent.email].filter(Boolean).join(" · ") || "Parent account"}
                         </p>
                       </button>
                     ))}
@@ -2754,7 +2704,7 @@ export default function StudentsPage() {
                     <div key={student.id} className="flex items-center justify-between rounded-xl border p-3">
                       <div>
                         <p className="font-bold text-primary">{student.student_class}</p>
-                        <p className="text-xs text-muted-foreground">{student.matricule} Â· {formatHierarchyValue(student.class_level)}</p>
+                        <p className="text-xs text-muted-foreground">{student.matricule} · {formatHierarchyValue(student.class_level)}</p>
                       </div>
                       <Badge variant="outline" className="border-primary/10 font-bold text-primary uppercase">
                         {student.section}
@@ -2765,7 +2715,7 @@ export default function StudentsPage() {
                     <div key={student.id} className="flex items-center justify-between rounded-xl border p-3">
                       <div>
                         <p className="font-bold text-primary">{student.name}</p>
-                        <p className="text-xs text-muted-foreground">{student.matricule} Â· {student.admission_number}</p>
+                        <p className="text-xs text-muted-foreground">{student.matricule} · {student.admission_number}</p>
                       </div>
                       <Button
                         variant="outline"
@@ -2811,6 +2761,25 @@ export default function StudentsPage() {
             <DialogDescription className="text-white/70">Keep the learner, guardian, and class details accurate across the school system.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 p-8 md:grid-cols-2">
+            <div className="flex items-center gap-4 md:col-span-2 rounded-2xl border bg-accent/10 p-4">
+              <Avatar className="h-16 w-16 border-2 border-primary/20">
+                <AvatarImage src={editPhotoPreview || editingStudent?.user?.avatar || ""} />
+                <AvatarFallback className="bg-primary/5 font-black text-primary">
+                  {(editingStudent?.user?.name || "S").charAt(0)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 space-y-1">
+                <Label>Profile Photo</Label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  disabled={uploadingPhoto}
+                  onChange={(event) => void handleUploadStudentPhoto(event.target.files?.[0])}
+                  className="h-11 rounded-xl file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white"
+                />
+                <p className="text-[10px] text-muted-foreground">{uploadingPhoto ? "Uploading photo..." : "Used on the student's ID card, report card and community profile."}</p>
+              </div>
+            </div>
             <div className="space-y-2"><Label>Full Name</Label><Input value={(editData.name as string) || ""} onChange={(event) => setEditData((current) => ({ ...current, name: event.target.value }))} /></div>
             <div className="space-y-2"><Label>Email</Label><Input type="email" value={(editData.email as string) || ""} onChange={(event) => setEditData((current) => ({ ...current, email: event.target.value }))} /></div>
             <div className="space-y-2"><Label>Phone</Label><Input value={(editData.phone as string) || ""} onChange={(event) => setEditData((current) => ({ ...current, phone: event.target.value }))} /></div>
@@ -3036,7 +3005,7 @@ export default function StudentsPage() {
                         <div>
                           <p className="font-bold text-primary">{student.user?.name}</p>
                           <p className="text-xs text-muted-foreground">
-                            {student.user?.matricule || "Pending matricule"} Â· {student.school_class_name || student.student_class}
+                            {student.user?.matricule || "Pending matricule"} · {student.school_class_name || student.student_class}
                           </p>
                         </div>
                         <Badge className={isSelected ? "bg-primary text-white" : "bg-accent/20 text-primary"}>
@@ -3078,7 +3047,7 @@ export default function StudentsPage() {
             <div className="rounded-2xl border bg-accent/10 p-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Parent Account</p>
               <p className="mt-2 text-lg font-black text-primary">{linkingParent?.name}</p>
-              <p className="text-xs text-muted-foreground">{linkingParent?.matricule || "Pending matricule"} Â· {linkingParent?.email || "No email"}</p>
+              <p className="text-xs text-muted-foreground">{linkingParent?.matricule || "Pending matricule"} · {linkingParent?.email || "No email"}</p>
             </div>
 
             <div className="grid gap-4 md:grid-cols-[1fr,220px]">
@@ -3127,7 +3096,7 @@ export default function StudentsPage() {
                       <div>
                         <p className="font-bold text-primary">{student.user?.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {student.user?.matricule || "Pending matricule"} Â· {student.school_class_name || student.student_class}
+                          {student.user?.matricule || "Pending matricule"} · {student.school_class_name || student.student_class}
                         </p>
                       </div>
                       <Badge className={isSelected ? "bg-primary text-white" : "bg-accent/20 text-primary"}>
@@ -3214,60 +3183,6 @@ export default function StudentsPage() {
               </Card>
             )}
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Admin password help for students */}
-      <Dialog
-        open={!!resetPasswordTarget}
-        onOpenChange={(open) => {
-          if (!open) {
-            setResetPasswordTarget(null);
-            setResetPasswordResult(null);
-          }
-        }}
-      >
-        <DialogContent className="max-w-sm rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 font-black text-primary">
-              <KeyRound className="h-4 w-4" /> Student Password
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Passwords are stored encrypted and can never be read back. Reset it
-              to a fresh one and share it with the student â€” they can change it
-              afterwards from their profile.
-            </DialogDescription>
-          </DialogHeader>
-          {resetPasswordResult ? (
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-green-200 bg-green-50 p-4 text-center">
-                <p className="text-[10px] font-black uppercase tracking-widest text-green-700">
-                  New password for {resetPasswordTarget?.user?.name || "student"}
-                </p>
-                <p className="mt-2 select-all font-mono text-2xl font-black tracking-wider text-green-800">
-                  {resetPasswordResult}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                className="h-11 w-full rounded-2xl font-bold"
-                onClick={() => {
-                  navigator.clipboard?.writeText(resetPasswordResult).catch(() => {});
-                  toast({ title: "Copied", description: "Password copied to clipboard." });
-                }}
-              >
-                Copy password
-              </Button>
-            </div>
-          ) : (
-            <Button
-              className="h-12 w-full rounded-2xl font-black uppercase text-xs"
-              onClick={handleResetPassword}
-              disabled={isResettingPassword}
-            >
-              {isResettingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : "Generate new password"}
-            </Button>
-          )}
         </DialogContent>
       </Dialog>
     </div>

@@ -29,6 +29,8 @@ import { useI18n } from "@/lib/i18n-context";
 import { usePlatformFees } from "@/lib/hooks/usePlatform";
 import { useCreatePayment, useMyPayments } from "@/lib/hooks/useFees";
 import { feesService } from "@/lib/api/services/fees.service";
+import { studentsService } from "@/lib/api/services/students.service";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getLicenseAccessState } from "@/lib/license";
 import { getApiErrorMessage } from "@/lib/api/errors";
 import { resolveMediaUrl } from "@/lib/media";
@@ -77,6 +79,102 @@ export default function SubscriptionPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const stopPolling = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
   useEffect(() => stopPolling, []);
+
+  // Parents: pay each child's platform subscription from this page.
+  const isParent = user?.role === "PARENT";
+  const queryClient = useQueryClient();
+  const childrenQuery = useQuery({
+    queryKey: ["subscription-children", user?.id],
+    queryFn: () => studentsService.getMyChildren(),
+    enabled: Boolean(user?.id) && isParent,
+  });
+  const children = Array.isArray(childrenQuery.data)
+    ? childrenQuery.data
+    : (childrenQuery.data as any)?.results ?? [];
+  const [childPayingId, setChildPayingId] = useState<string>("");
+  const [childTxn, setChildTxn] = useState<any | null>(null);
+  const childPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stopChildPolling = () => { if (childPollRef.current) { clearInterval(childPollRef.current); childPollRef.current = null; } };
+  useEffect(() => stopChildPolling, []);
+
+  const handlePayChildSubscription = async (child: any) => {
+    const childUserId = String(child?.user?.id || child?.user_id || "");
+    if (!childUserId) {
+      toast({ variant: "destructive", title: "Cannot pay", description: "This child's account could not be identified." });
+      return;
+    }
+    if (!paymentData.number.trim()) {
+      toast({
+        variant: "destructive",
+        title: language === "en" ? "Missing Number" : "Numero Manquant",
+        description: language === "en" ? "Enter your mobile money number in the payment card first." : "Entrez d'abord votre numero mobile money dans la carte de paiement.",
+      });
+      return;
+    }
+    setChildPayingId(childUserId);
+    try {
+      const operator = paymentData.method === "orange" ? "orange_money" : "mtn_momo";
+      const created = await feesService.payunitCollect({ phone: paymentData.number.trim(), operator, student_id: childUserId });
+      setChildTxn(created);
+      if (created?.status !== "SUCCESS") {
+        toast({
+          title: language === "en" ? "Approve on your phone" : "Approuvez sur votre telephone",
+          description: language === "en" ? "A mobile money prompt has been sent. Waiting for confirmation..." : "Une invite mobile money a ete envoyee. En attente de confirmation...",
+        });
+      }
+    } catch (error) {
+      setChildPayingId("");
+      toast({
+        variant: "destructive",
+        title: language === "en" ? "Payment Failed" : "Paiement Echoue",
+        description: getApiErrorMessage(error, language === "en" ? "We could not start the payment for this child." : "Nous n'avons pas pu demarrer le paiement pour cet enfant."),
+      });
+    }
+  };
+
+  useEffect(() => {
+    stopChildPolling();
+    if (!childTxn?.transaction_id) return;
+
+    const finishChild = async () => {
+      stopChildPolling();
+      setChildTxn(null);
+      setChildPayingId("");
+      await queryClient.invalidateQueries({ queryKey: ["subscription-children"] });
+      toast({
+        title: language === "en" ? "Child Subscription Paid" : "Abonnement de l'enfant Paye",
+        description: language === "en" ? "The payment was received and your child's account is now active." : "Le paiement a ete recu et le compte de votre enfant est maintenant actif.",
+      });
+    };
+
+    if (childTxn.status === "SUCCESS") { void finishChild(); return; }
+    if (childTxn.status !== "PENDING") { setChildPayingId(""); return; }
+
+    let tries = 0;
+    const tick = async () => {
+      tries += 1;
+      try {
+        const updated = await feesService.payunitStatus(childTxn.transaction_id);
+        if (updated.status === "SUCCESS") {
+          void finishChild();
+        } else if (updated.status === "FAILED" || updated.status === "CANCELLED") {
+          stopChildPolling();
+          setChildTxn(null);
+          setChildPayingId("");
+          toast({
+            variant: "destructive",
+            title: language === "en" ? "Payment Not Completed" : "Paiement Non Termine",
+            description: language === "en" ? "The mobile money payment was not completed. Please try again." : "Le paiement mobile money n'a pas abouti. Veuillez reessayer.",
+          });
+        }
+      } catch { /* keep polling */ }
+      if (tries >= 80) { stopChildPolling(); setChildPayingId(""); }
+    };
+    void tick();
+    childPollRef.current = setInterval(tick, 2500);
+    return stopChildPolling;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [childTxn?.transaction_id, childTxn?.status]);
 
   const liveFees: Record<string, string> = {};
   const feeRows = (platformFeesData as any)?.results ?? [];
@@ -418,6 +516,67 @@ export default function SubscriptionPage() {
           </div>
         </div>
       </div>
+
+      {isParent ? (
+        <Card className="border-none shadow-xl overflow-hidden rounded-[2rem]">
+          <CardHeader className="bg-primary p-8 text-white">
+            <CardTitle className="text-xl font-black">{language === "en" ? "Children Subscriptions" : "Abonnements des Enfants"}</CardTitle>
+            <CardDescription className="text-white/60">
+              {language === "en"
+                ? "Pay each child's platform subscription directly from your account. Enter your mobile money number in the payment card above, then press Pay."
+                : "Payez l'abonnement de chaque enfant directement depuis votre compte. Entrez votre numero mobile money dans la carte de paiement ci-dessus, puis appuyez sur Payer."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-6 space-y-3">
+            {childrenQuery.isLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary/40" /></div>
+            ) : children.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">{language === "en" ? "No linked children yet." : "Aucun enfant lie pour le moment."}</p>
+            ) : (
+              children.map((child: any) => {
+                const childUserId = String(child?.user?.id || child?.user_id || "");
+                const paid = Boolean(child?.user?.is_license_paid);
+                const busy = childPayingId === childUserId && childTxn?.status === "PENDING";
+                return (
+                  <div key={child.id} className="flex flex-col gap-3 rounded-2xl border bg-accent/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="font-black text-primary">{child.user?.name || "Child"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(child.school_class_name || child.student_class || "Class")} • {child.user?.matricule || child.admission_number || ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Badge className={cn("border-none font-black uppercase text-[10px]", paid ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700")}>
+                        {paid ? (language === "en" ? "Paid" : "Paye") : (language === "en" ? "Not paid" : "Non paye")}
+                      </Badge>
+                      {paid ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-green-600"><CheckCircle2 className="h-4 w-4" /> {language === "en" ? "Active" : "Actif"}</span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="h-10 gap-2 rounded-xl font-bold"
+                          disabled={busy || Boolean(childPayingId && childPayingId !== childUserId)}
+                          onClick={() => void handlePayChildSubscription(child)}
+                        >
+                          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                          {busy ? (language === "en" ? "Waiting..." : "En attente...") : (language === "en" ? "Pay Subscription" : "Payer l'abonnement")}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            {children.some((child: any) => !child?.user?.is_license_paid) ? (
+              <p className="pt-2 text-[11px] text-muted-foreground">
+                {language === "en"
+                  ? "You will receive a daily reminder for every child whose subscription remains unpaid."
+                  : "Vous recevrez un rappel quotidien pour chaque enfant dont l'abonnement reste impaye."}
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Dialog open={!!issuedReceipt} onOpenChange={() => setIssuedReceipt(null)}>
         <DialogContent className="sm:max-w-2xl p-0 border-none shadow-2xl rounded-[2rem] overflow-hidden">

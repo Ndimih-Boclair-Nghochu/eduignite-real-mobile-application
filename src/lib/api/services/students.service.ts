@@ -111,6 +111,16 @@ export const studentsService = {
     return data;
   },
 
+  // Upload/replace a student's profile photo (school admin or permitted class master).
+  async uploadStudentPhoto(id: string, file: File): Promise<{ avatar: string }> {
+    const formData = new FormData();
+    formData.append('photo', file);
+    const { data } = await apiClient.post(`${API.STUDENTS.DETAIL(id)}upload-photo/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+  },
+
   async getHonourRoll(params?: ListParams): Promise<PaginatedResponse<Student>> {
     const { data } = await apiClient.get(API.STUDENTS.HONOUR_ROLL, { params });
     return normalizePaginatedResponse(data);

@@ -72,6 +72,59 @@ const toNumber = (value: unknown) => {
 const formatRole = (role?: string) => ROLE_LABELS[role || ""] || role || "Staff";
 const formatSection = (section?: string) => SECTION_LABELS[(section || "").toLowerCase()] || section || "Unassigned";
 
+function ClassMasterPermissionBanner({ schoolId, enabled }: { schoolId: string; enabled: boolean }) {
+  const { toast } = useToast();
+  const [isOn, setIsOn] = useState(enabled);
+  const [saving, setSaving] = useState(false);
+
+  const toggle = async () => {
+    setSaving(true);
+    try {
+      const { schoolsService } = await import("@/lib/api/services/schools.service");
+      const next = !isOn;
+      await schoolsService.updateSchoolSettings(schoolId, { class_masters_can_edit_students: next } as any);
+      setIsOn(next);
+      toast({
+        title: next ? "Permission granted" : "Permission withdrawn",
+        description: next
+          ? "Class masters now have a Student Management tab where they can edit the students of their own class."
+          : "Class masters can no longer see or edit their class students.",
+      });
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Could not update permission", description: error?.response?.data?.detail || "Please try again." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card className="border-none bg-primary text-white shadow-xl rounded-[2rem] overflow-hidden">
+      <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="flex items-center gap-2 text-lg font-black uppercase tracking-tight">
+            <ShieldCheck className="h-5 w-5 text-secondary" /> Class Master Permissions
+          </p>
+          <p className="mt-1 max-w-2xl text-sm text-white/70">
+            Give permissions to class masters to edit their student informations. When on, every class master gets a
+            Student Management tab limited strictly to the students of their own class — no payments, only information and photos.
+          </p>
+        </div>
+        <Button
+          onClick={() => void toggle()}
+          disabled={saving}
+          className={cn(
+            "h-12 shrink-0 gap-2 rounded-xl px-6 font-black uppercase tracking-widest text-xs",
+            isOn ? "bg-green-500 text-white hover:bg-green-600" : "bg-white text-primary hover:bg-white/90",
+          )}
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+          {isOn ? "Permission ON — click to turn off" : "Give Permission to Class Masters"}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function SchoolAdminHierarchyOverview({ schoolId, schoolName }: { schoolId: string; schoolName?: string }) {
   const { user } = useAuth();
   const { data: schoolProfile } = useMySchool();
@@ -203,6 +256,14 @@ function SchoolAdminHierarchyOverview({ schoolId, schoolName }: { schoolId: stri
           {schoolSettings?.academic_year || "Academic year pending"}
         </Badge>
       </div>
+
+      {!settingsLoading ? (
+        <ClassMasterPermissionBanner
+          key={String((schoolSettings as any)?.class_masters_can_edit_students ?? false)}
+          schoolId={schoolId}
+          enabled={Boolean((schoolSettings as any)?.class_masters_can_edit_students)}
+        />
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         {[

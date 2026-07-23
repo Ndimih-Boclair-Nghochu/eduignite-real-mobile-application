@@ -76,7 +76,7 @@ export function EduIgniteErrorPage({
     <main className="min-h-dvh bg-[radial-gradient(circle_at_top,#f8fafc_0,#ffffff_45%,#eef4fb_100%)] px-4 py-10 text-primary">
       <div className="mx-auto flex min-h-[calc(100dvh-5rem)] max-w-3xl flex-col items-center justify-center text-center">
         <img
-          src="/eduignite-logo.svg"
+          src="/icon.png"
           alt="EduIgnite"
           className="mb-8 h-24 w-24 object-contain"
         />

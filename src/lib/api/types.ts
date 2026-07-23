@@ -271,6 +271,8 @@ export type FounderAccessLevel = "READ_ONLY" | "FULL";
 export interface FounderShareAdjustment {
   id: string;
   percentage: string;
+  /** Whole shares granted by this allocation, alongside the percentage */
+  units: number;
   note?: string;
   /** ISO 8601 datetime when this share allocation expires and is auto-removed */
   expires_at: string | null;
@@ -298,6 +300,10 @@ export interface FounderProfile {
   primary_share_percentage: string;
   additional_share_percentage: string;
   total_share_percentage: string;
+  /** Share allocation as a whole number of shares, held alongside the percentage */
+  primary_share_units: number;
+  additional_share_units: number;
+  total_share_units: number;
   is_primary_founder: boolean;
   can_be_removed: boolean;
   is_active: boolean;
@@ -326,6 +332,8 @@ export interface CreateFounderRequest {
   role: Extract<UserRole, "SUPER_ADMIN" | "COO" | "INV" | "DESIGNER">;
   founder_title: string;
   primary_share_percentage: string;
+  /** Whole shares granted alongside the percentage */
+  primary_share_units?: number;
   /** CEO/CTO sets whether this founder's shares are renewable */
   has_renewable_shares?: boolean;
   /** Days in the renewal period (required when has_renewable_shares=true) */
@@ -341,6 +349,8 @@ export type UpdateFounderRequest = Partial<CreateFounderRequest> & {
 
 export interface AddFounderSharesRequest {
   percentage: string;
+  /** Whole shares granted by this allocation, alongside the percentage */
+  units?: number;
   note?: string;
   /** Number of days until this share allocation expires and is auto-removed */
   duration_days: number;

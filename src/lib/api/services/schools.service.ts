@@ -119,6 +119,34 @@ export const schoolsService = {
     return normalizeSchool(data) as School;
   },
 
+  // --- One-time school subscription (founders) ---------------------------
+  async getSchoolSubscription(id: string): Promise<SchoolSubscription> {
+    const { data } = await apiClient.get(`/schools/schools/${id}/subscription/`);
+    return data;
+  },
+  // Set the yearly fee, on its own.
+  async setSchoolSubscriptionAmount(id: string, amount: number, currency?: string): Promise<SchoolSubscription> {
+    const { data } = await apiClient.post(`/schools/schools/${id}/subscription/amount/`, { amount, currency });
+    return data;
+  },
+  // Change the status, on its own — no amount needed.
+  async setSchoolSubscriptionStatus(
+    id: string,
+    body: { status: string; free_until?: string | null; expires_on?: string | null }
+  ): Promise<SchoolSubscription> {
+    const { data } = await apiClient.post(`/schools/schools/${id}/subscription/status/`, body);
+    return data;
+  },
+  async getSchoolDetailCounts(id: string): Promise<SchoolDetailCounts> {
+    const { data } = await apiClient.get(`/schools/schools/${id}/details/`);
+    return data;
+  },
+  // The school admin pays the one-time subscription for the whole school.
+  async paySchoolSubscription(phone: string, operator?: string): Promise<any> {
+    const { data } = await apiClient.post("/fees/payunit/school-subscription/", { phone, operator });
+    return data;
+  },
+
   async getSchoolStats(): Promise<PlatformStats> {
     const { data } = await apiClient.get(API.SCHOOLS.STATS);
     return data;
@@ -356,4 +384,26 @@ export const schoolsService = {
     );
     return data;
   },
+};
+
+export type SchoolSubscription = {
+  status: "free" | "paid" | "unpaid";
+  effective_state: "free" | "paid" | "unpaid";
+  amount: number;
+  currency: string;
+  free_until: string | null;
+  expires_on?: string | null;
+  paid_at?: string | null;
+  note?: string;
+};
+
+export type SchoolDetailCounts = {
+  school: { id: string; name: string };
+  total_users: number;
+  students: number;
+  parents: number;
+  staff: number;
+  by_role: Record<string, number>;
+  active_users: number;
+  subscription: SchoolSubscription;
 };

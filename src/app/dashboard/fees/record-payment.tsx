@@ -25,7 +25,7 @@ import { usePlatformFees } from "@/lib/hooks/usePlatform";
 import { useHierarchyClasses } from "@/lib/hooks/useSchools";
 import { studentSubscriptionBlocks } from "./subscription-access";
 import { getApiErrorMessage } from "@/lib/api/errors";
-import { buildFeeReceiptHtml, downloadReceiptHtml, printReceiptHtml, receiptFromPayment, money } from "./fee-receipt";
+import { downloadReceiptPdf, printReceiptPdf, receiptFromPayment, money } from "./fee-receipt";
 
 const ALL = "all";
 const METHODS = [
@@ -135,8 +135,6 @@ export function RecordPayment() {
     },
     onError: (error: any) => toast({ variant: "destructive", title: "Could not record fee", description: getApiErrorMessage(error, error?.message || "Please try again.") }),
   });
-
-  const receiptHtml = receipt ? buildFeeReceiptHtml(receipt, schoolName) : "";
 
   const renderRecordBody = () => {
     if (!selectedStudent) {
@@ -301,8 +299,8 @@ export function RecordPayment() {
             </div>
           ) : null}
           <DialogFooter className="gap-2 sm:gap-2">
-            <Button variant="outline" className="gap-2" onClick={() => downloadReceiptHtml(receiptHtml, `receipt_${receipt?.receiptNo || "fee"}.html`)}><Download className="h-4 w-4" /> Download</Button>
-            <Button className="gap-2" onClick={() => printReceiptHtml(receiptHtml)}><Printer className="h-4 w-4" /> Print</Button>
+            <Button variant="outline" className="gap-2" onClick={() => receipt && downloadReceiptPdf(receipt, schoolName)}><Download className="h-4 w-4" /> Download PDF</Button>
+            <Button className="gap-2" onClick={() => receipt && printReceiptPdf(receipt, schoolName)}><Printer className="h-4 w-4" /> Print</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

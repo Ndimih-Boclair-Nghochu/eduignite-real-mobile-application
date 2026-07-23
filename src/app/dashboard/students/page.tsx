@@ -30,7 +30,9 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { BookOpen, ChevronDown, Eye, FileText, Link2, Loader2, Plus, Search, Sparkles, Upload, UserPlus, Users } from "lucide-react";
+import { BookOpen, Check, ChevronDown, Copy, Eye, FileText, KeyRound, Link2, Loader2, Plus, Search, Sparkles, Upload, UserPlus, Users } from "lucide-react";
+import { usersService } from "@/lib/api/services/users.service";
+import { getApiErrorMessage } from "@/lib/api/errors";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type {
   BulkStudentUploadRequest,
@@ -330,6 +332,34 @@ export default function StudentsPage() {
   const { toast } = useToast();
   const currentSchoolId = getUserSchoolId(user);
   const canManageStudentAdmissions = canManageStudentAdmissionsForRole(user?.role);
+
+  // Issuing a student a new password when they have forgotten theirs. The
+  // value is shown once, on the way back from the server - stored passwords
+  // are hashed, so it cannot be looked up again afterwards.
+  const [resettingFor, setResettingFor] = useState<any | null>(null);
+  const [issuedPassword, setIssuedPassword] = useState<string | null>(null);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+
+  const handleGeneratePassword = async (studentRow: any) => {
+    const userId = studentRow?.user?.id;
+    if (!userId) return;
+    setResettingFor(studentRow);
+    setIssuedPassword(null);
+    setIsResettingPassword(true);
+    try {
+      const result = await usersService.adminResetStudentPassword(userId);
+      setIssuedPassword(result.password);
+    } catch (error: any) {
+      setResettingFor(null);
+      toast({
+        variant: "destructive",
+        title: "Could not generate a password",
+        description: getApiErrorMessage(error, "Please try again."),
+      });
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
   const [searchTerm, setSearchTerm] = useState("");
   const [adminSubSchoolFilter, setAdminSubSchoolFilter] = useState("all");
   const [adminClassFilter, setAdminClassFilter] = useState("all");
@@ -1930,11 +1960,23 @@ setEditData({
                               View
                             </Button>
                             {canManageStudentAdmissions && student.user?.id ? (
-                              <UserModerationControls
-                                user={student.user}
-                                onChanged={() => { void studentsQuery.refetch(); }}
-                                compact
-                              />
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-9 rounded-xl border-primary/10 font-bold text-primary"
+                                  onClick={() => handleGeneratePassword(student)}
+                                  title="Generate a new password for this student"
+                                >
+                                  <KeyRound className="mr-2 h-4 w-4" />
+                                  Password
+                                </Button>
+                                <UserModerationControls
+                                  user={student.user}
+                                  onChanged={() => { void studentsQuery.refetch(); }}
+                                  compact
+                                />
+                              </>
                             ) : null}
                           </div>
                         </TableCell>
@@ -1944,6 +1986,56 @@ setEditData({
                 </Table>
               )}
               <DataPagination pager={registryPager} label="students" />
+
+          {/* The generated password, shown once. */}
+          <Dialog
+            open={Boolean(resettingFor)}
+            onOpenChange={(open) => { if (!open) { setResettingFor(null); setIssuedPassword(null); } }}
+          >
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-primary">
+                  <KeyRound className="h-5 w-5" /> New password
+                </DialogTitle>
+                <DialogDescription>
+                  {resettingFor?.user?.name || resettingFor?.name} can sign in with this password and
+                  change it afterwards.
+                </DialogDescription>
+              </DialogHeader>
+
+              {isResettingPassword ? (
+                <div className="flex items-center justify-center gap-3 py-10 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" /> Generating...
+                </div>
+              ) : issuedPassword ? (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 text-center">
+                    <p className="font-mono text-2xl font-black tracking-wider text-primary">{issuedPassword}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2 rounded-xl"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(issuedPassword);
+                      toast({ title: "Copied", description: "The password is on your clipboard." });
+                    }}
+                  >
+                    <Copy className="h-4 w-4" /> Copy password
+                  </Button>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Write it down or copy it now — passwords are stored hashed, so this value cannot be
+                    shown again. Generating another one replaces it.
+                  </p>
+                </div>
+              ) : null}
+
+              <DialogFooter>
+                <Button onClick={() => { setResettingFor(null); setIssuedPassword(null); }} className="gap-2">
+                  <Check className="h-4 w-4" /> Done
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
             </CardContent>
           </Card>
 

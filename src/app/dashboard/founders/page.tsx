@@ -45,6 +45,7 @@ import {
   Smartphone,
   Timer,
   Trash2,
+  Users,
   Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -66,6 +67,7 @@ type FounderFormState = {
   role: string;
   founderTitle: string;
   primarySharePercentage: string;
+  primaryShareUnits: string;
   hasRenewableShares: boolean;
   shareRenewalPeriodDays: string;
   accessLevel: FounderAccessLevel;
@@ -73,6 +75,7 @@ type FounderFormState = {
 
 type ShareFormState = {
   percentage: string;
+  units: string;
   note: string;
   durationDays: string;
 };
@@ -93,6 +96,7 @@ const EMPTY_FORM: FounderFormState = {
   role: "COO",
   founderTitle: "",
   primarySharePercentage: "",
+  primaryShareUnits: "",
   hasRenewableShares: false,
   shareRenewalPeriodDays: "365",
   accessLevel: "FULL",
@@ -100,6 +104,7 @@ const EMPTY_FORM: FounderFormState = {
 
 const EMPTY_SHARE_FORM: ShareFormState = {
   percentage: "",
+  units: "",
   note: "",
   durationDays: "365",
 };
@@ -197,6 +202,7 @@ export default function FoundersManagementPage() {
       role: founder.role,
       founderTitle: founder.founder_title,
       primarySharePercentage: founder.primary_share_percentage,
+      primaryShareUnits: String(founder.primary_share_units ?? 0),
       hasRenewableShares: founder.has_renewable_shares,
       shareRenewalPeriodDays: String(founder.share_renewal_period_days),
       accessLevel: founder.access_level,
@@ -220,6 +226,7 @@ export default function FoundersManagementPage() {
         role: form.role as "SUPER_ADMIN" | "COO" | "INV" | "DESIGNER",
         founder_title: form.founderTitle,
         primary_share_percentage: form.primarySharePercentage,
+        primary_share_units: Number(form.primaryShareUnits || 0),
         has_renewable_shares: form.hasRenewableShares,
         share_renewal_period_days: form.hasRenewableShares
           ? parseInt(form.shareRenewalPeriodDays, 10)
@@ -254,6 +261,7 @@ export default function FoundersManagementPage() {
           role: form.role as "SUPER_ADMIN" | "COO" | "INV" | "DESIGNER",
           founder_title: form.founderTitle,
           primary_share_percentage: form.primarySharePercentage,
+          primary_share_units: Number(form.primaryShareUnits || 0),
           access_level: form.accessLevel,
         },
       });
@@ -278,6 +286,7 @@ export default function FoundersManagementPage() {
         id: selectedFounder.id,
         data: {
           percentage: shareForm.percentage,
+          units: Number(shareForm.units || 0),
           note: shareForm.note,
           duration_days: parseInt(shareForm.durationDays, 10),
         },
@@ -483,9 +492,9 @@ export default function FoundersManagementPage() {
 
             <CardContent className="space-y-6 p-6 sm:p-8">
               <div className="grid gap-4 sm:grid-cols-3">
-                <ShareBlock label="Primary Shares" value={`${founder.primary_share_percentage}%`} />
-                <ShareBlock label="Additional Shares" value={`${founder.additional_share_percentage}%`} accent />
-                <ShareBlock label="Total Shares" value={`${founder.total_share_percentage}%`} />
+                <ShareBlock label="Primary Shares" value={`${founder.primary_share_percentage}%`} units={founder.primary_share_units} />
+                <ShareBlock label="Additional Shares" value={`${founder.additional_share_percentage}%`} units={founder.additional_share_units} accent />
+                <ShareBlock label="Total Shares" value={`${founder.total_share_percentage}%`} units={founder.total_share_units} />
               </div>
 
               <div className="rounded-2xl border border-accent bg-accent/20 p-4">
@@ -755,8 +764,8 @@ export default function FoundersManagementPage() {
 
           <div className="grid gap-5 py-2">
             <div className="grid gap-4 sm:grid-cols-2">
-              <ShareBlock label="Primary Shares" value={`${selectedFounder?.primary_share_percentage || "0.00"}%`} />
-              <ShareBlock label="Additional Shares" value={`${selectedFounder?.additional_share_percentage || "0.00"}%`} accent />
+              <ShareBlock label="Primary Shares" value={`${selectedFounder?.primary_share_percentage || "0.00"}%`} units={selectedFounder?.primary_share_units} />
+              <ShareBlock label="Additional Shares" value={`${selectedFounder?.additional_share_percentage || "0.00"}%`} units={selectedFounder?.additional_share_units} accent />
             </div>
 
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
@@ -777,6 +786,16 @@ export default function FoundersManagementPage() {
                   placeholder="e.g. 2.50"
                   value={shareForm.percentage}
                   onChange={(event) => setShareForm((prev) => ({ ...prev, percentage: event.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="additional-share-units">New Additional Shares (number)</Label>
+                <Input
+                  id="additional-share-units"
+                  inputMode="numeric"
+                  placeholder="e.g. 500"
+                  value={shareForm.units}
+                  onChange={(event) => setShareForm((prev) => ({ ...prev, units: event.target.value }))}
                 />
               </div>
               <div className="space-y-2">
@@ -867,7 +886,18 @@ export default function FoundersManagementPage() {
   );
 }
 
-function ShareBlock({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+function ShareBlock({
+  label,
+  value,
+  units,
+  accent = false,
+}: {
+  label: string;
+  value: string;
+  /** Whole-share count shown under the percentage, when one is allocated. */
+  units?: number;
+  accent?: boolean;
+}) {
   return (
     <div className={cn("rounded-2xl border p-4", accent ? "border-secondary/20 bg-secondary/10" : "border-accent bg-accent/20")}>
       <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{label}</p>
@@ -875,6 +905,11 @@ function ShareBlock({ label, value, accent = false }: { label: string; value: st
         <PieChart className="h-4 w-4 text-primary/50" />
         <span className="text-lg font-black text-primary">{value}</span>
       </div>
+      {units ? (
+        <p className="mt-1 text-xs font-bold text-muted-foreground">
+          {units.toLocaleString()} {units === 1 ? "share" : "shares"}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1004,6 +1039,17 @@ function FounderDialog({
               onChange={(event) => setForm((prev) => ({ ...prev, primarySharePercentage: event.target.value }))}
               disabled={disableRoleAndPrimaryShare}
               placeholder="e.g. 8.50"
+            />
+          </Field>
+
+          <Field label="Primary Shares (number)" htmlFor={`${title}-share-units`}>
+            <Input
+              id={`${title}-share-units`}
+              inputMode="numeric"
+              value={form.primaryShareUnits}
+              onChange={(event) => setForm((prev) => ({ ...prev, primaryShareUnits: event.target.value }))}
+              disabled={disableRoleAndPrimaryShare}
+              placeholder="e.g. 1000"
             />
           </Field>
 

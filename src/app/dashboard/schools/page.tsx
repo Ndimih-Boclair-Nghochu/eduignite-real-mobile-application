@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -126,7 +126,7 @@ const useSchoolStats = () => {
     queryFn: async () => {
       return schoolsService.getSchoolStats();
     },
-    initialData: {},
+    initialData: {} as any,
   });
 };
 
@@ -197,6 +197,8 @@ export default function SchoolsManagementPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [managedSchool, setManagedSchool] = useState<any>(null);
+  const [subscriptionSchool, setSubscriptionSchool] = useState<any>(null);
+  const [detailSchool, setDetailSchool] = useState<any>(null);
   const [onboardingSuccess, setOnboardingSuccess] = useState<any>(null);
   const [schoolPendingDelete, setSchoolPendingDelete] = useState<any>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState({ matricule: "", password: "", deletion_reason: "" });
@@ -671,7 +673,27 @@ export default function SchoolsManagementPage() {
               </div>
             </CardContent>
             
-            <CardFooter className="pt-6 pb-6 flex flex-col gap-2">
+            <CardFooter className="flex-col gap-2 pt-6 pb-6">
+              {schoolRegistryMode === "active" && (school as any).subscription && (
+                <div className="flex w-full items-center justify-between rounded-xl bg-accent/30 px-3 py-2">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                    Subscription
+                  </span>
+                  {(() => {
+                    const st = (school as any).subscription.effective_state as string;
+                    const styles: Record<string, string> = {
+                      paid: "bg-green-100 text-green-700",
+                      free: "bg-sky-100 text-sky-700",
+                      unpaid: "bg-red-100 text-red-700",
+                    };
+                    return (
+                      <Badge className={cn("border-none text-[9px] font-black uppercase", styles[st] || "bg-gray-100 text-gray-600")}>
+                        {st}
+                      </Badge>
+                    );
+                  })()}
+                </div>
+              )}
               <Button
                 variant={schoolRegistryMode === "draft" ? "default" : "outline"}
                 className="w-full h-11 rounded-xl text-[10px] font-black uppercase tracking-widest gap-2 border-primary/10 text-primary hover:bg-primary/5"
@@ -681,6 +703,24 @@ export default function SchoolsManagementPage() {
                 {schoolRegistryMode === "draft" ? <RotateCcw className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
                 {schoolRegistryMode === "draft" ? "Restore School" : "Node Governance"}
               </Button>
+              {schoolRegistryMode === "active" && isFounderOwner && (
+                <div className="flex w-full gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-10 flex-1 rounded-xl text-[10px] font-black uppercase tracking-widest gap-1.5 border-primary/10 text-primary hover:bg-primary/5"
+                    onClick={() => setSubscriptionSchool(school)}
+                  >
+                    <Settings2 className="h-3.5 w-3.5" /> Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-10 flex-1 rounded-xl text-[10px] font-black uppercase tracking-widest gap-1.5 border-primary/10 text-primary hover:bg-primary/5"
+                    onClick={() => setDetailSchool(school)}
+                  >
+                    <User className="h-3.5 w-3.5" /> Details
+                  </Button>
+                </div>
+              )}
               {canPermanentlyDelete && schoolRegistryMode === "active" ? (
                 <Button
                   variant="destructive"
@@ -709,6 +749,20 @@ export default function SchoolsManagementPage() {
           </p>
         </div>
       ) : null}
+
+      {/* SCHOOL SUBSCRIPTION (founders) */}
+      {subscriptionSchool && (
+        <SubscriptionDialog
+          school={subscriptionSchool}
+          onClose={() => setSubscriptionSchool(null)}
+          onSaved={() => { setSubscriptionSchool(null); queryClient.invalidateQueries({ queryKey: ["schools"] }); }}
+        />
+      )}
+
+      {/* SCHOOL DETAILS / COUNTS (founders) */}
+      {detailSchool && (
+        <SchoolDetailsDialog school={detailSchool} onClose={() => setDetailSchool(null)} />
+      )}
 
       {/* NODE CONFIGURATION DIALOG */}
       <Dialog open={!!managedSchool} onOpenChange={() => setManagedSchool(null)}>
@@ -964,5 +1018,195 @@ function SignatureSVG({ className }: { className?: string }) {
       <path d="M10 25C15 25 20 15 25 15C30 15 35 30 40 30C45 30 50 10 55 10C60 10 65 35 70 35C75 35 80 20 85 20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <path d="M15 30L85 10" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" strokeDasharray="2 2" />
     </svg>
+  );
+}
+
+/**
+ * Founder control of a school's yearly subscription.
+ *
+ * Two independent things, deliberately kept apart so neither is confused for
+ * the other:
+ *   1. the yearly fee — how much this school pays;
+ *   2. the status — free, paid or unpaid, which decides whether accounts work.
+ * Each saves on its own, so setting a fee never touches the status and changing
+ * the status never asks for an amount.
+ */
+function SubscriptionDialog({ school, onClose, onSaved }: { school: any; onClose: () => void; onSaved: () => void }) {
+  const { toast } = useToast();
+  const [sub, setSub] = useState<any>(school.subscription || {});
+  const currency = sub.currency || "XAF";
+
+  // Section 1 — the yearly fee.
+  const [amount, setAmount] = useState(String(sub.amount || 0));
+  const [savingFee, setSavingFee] = useState(false);
+
+  // Section 2 — the status.
+  const [status, setStatus] = useState<string>(sub.status || "free");
+  const [freeUntil, setFreeUntil] = useState<string>(sub.free_until || "");
+  const [savingStatus, setSavingStatus] = useState(false);
+
+  async function saveFee() {
+    setSavingFee(true);
+    try {
+      const next = await schoolsService.setSchoolSubscriptionAmount(school.id, Number(amount) || 0, currency);
+      setSub(next);
+      toast({ title: "Yearly fee saved", description: `${(next.amount || 0).toLocaleString()} ${next.currency} per year.` });
+      onSaved();
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Could not save the fee", description: e?.response?.data?.detail || "Please try again." });
+    } finally {
+      setSavingFee(false);
+    }
+  }
+
+  async function saveStatus() {
+    setSavingStatus(true);
+    try {
+      const next = await schoolsService.setSchoolSubscriptionStatus(school.id, {
+        status,
+        free_until: status === "free" ? (freeUntil || null) : null,
+      });
+      setSub(next);
+      toast({ title: "Status updated", description: `${school.name} is now ${status}.` });
+      onSaved();
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Could not change status", description: e?.response?.data?.detail || "Please try again." });
+    } finally {
+      setSavingStatus(false);
+    }
+  }
+
+  const effective = sub.effective_state || sub.status || "free";
+  const stateStyle: Record<string, string> = {
+    paid: "bg-green-100 text-green-700",
+    free: "bg-sky-100 text-sky-700",
+    unpaid: "bg-red-100 text-red-700",
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md overflow-y-auto rounded-2xl bg-background p-6 shadow-xl max-h-[92dvh]">
+        <div className="flex items-start justify-between">
+          <div>
+            <h2 className="text-lg font-black">Subscription</h2>
+            <p className="text-sm text-muted-foreground">{school.name}</p>
+          </div>
+          <Badge className={cn("border-none text-[10px] font-black uppercase", stateStyle[effective] || "bg-gray-100 text-gray-600")}>
+            {effective}
+          </Badge>
+        </div>
+
+        {/* SECTION 1 — YEARLY FEE */}
+        <div className="mt-5 rounded-2xl border border-input p-4">
+          <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Yearly fee</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            How much this school pays per year to keep all its accounts active.
+          </p>
+          <div className="mt-3 flex items-center gap-2">
+            <Input type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} className="flex-1" />
+            <span className="text-sm font-bold text-muted-foreground">{currency} / year</span>
+          </div>
+          <Button className="mt-3 w-full" size="sm" disabled={savingFee} onClick={saveFee}>
+            {savingFee && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Save fee
+          </Button>
+        </div>
+
+        {/* SECTION 2 — STATUS */}
+        <div className="mt-4 rounded-2xl border border-input p-4">
+          <p className="text-xs font-black uppercase tracking-widest text-muted-foreground">Status</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Paid or free keeps every account active. Unpaid deactivates them (parents excepted) until settled.
+          </p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {["free", "paid", "unpaid"].map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatus(s)}
+                className={cn(
+                  "rounded-xl border px-3 py-2 text-sm font-bold capitalize",
+                  status === s ? "border-primary bg-primary/5 text-primary" : "border-input"
+                )}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+
+          {status === "free" && (
+            <div className="mt-3">
+              <label className="block text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                Free until (optional)
+              </label>
+              <Input type="date" value={freeUntil} onChange={(e) => setFreeUntil(e.target.value)} className="mt-1.5" />
+            </div>
+          )}
+          {status === "paid" && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Marking paid keeps the school active for one year{sub.expires_on ? ` (currently until ${sub.expires_on})` : ""}.
+            </p>
+          )}
+
+          <Button className="mt-3 w-full" size="sm" disabled={savingStatus} onClick={saveStatus}>
+            {savingStatus && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Save status
+          </Button>
+        </div>
+
+        <Button className="mt-5 w-full" variant="outline" onClick={onClose}>Done</Button>
+      </div>
+    </div>
+  );
+}
+
+/** Founder view of a school's headline counts. */
+function SchoolDetailsDialog({ school, onClose }: { school: any; onClose: () => void }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    schoolsService.getSchoolDetailCounts(school.id)
+      .then((d) => { if (alive) setData(d); })
+      .catch(() => { if (alive) setData(null); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [school.id]);
+
+  const rows = data
+    ? [
+        { label: "Total users", value: data.total_users },
+        { label: "Students", value: data.students },
+        { label: "Parents", value: data.parents },
+        { label: "Staff", value: data.staff },
+        { label: "Active accounts", value: data.active_users },
+      ]
+    : [];
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-background p-6 shadow-xl">
+        <h2 className="text-lg font-black">{school.name}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">School details</p>
+
+        {loading ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">Loading…</p>
+        ) : !data ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">Could not load details.</p>
+        ) : (
+          <div className="mt-5 space-y-2">
+            {rows.map((r) => (
+              <div key={r.label} className="flex items-center justify-between rounded-xl bg-accent/30 px-4 py-3">
+                <span className="text-sm font-semibold text-muted-foreground">{r.label}</span>
+                <span className="text-lg font-black text-primary tabular-nums">{r.value.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <Button className="mt-6 w-full" variant="outline" onClick={onClose}>Close</Button>
+      </div>
+    </div>
   );
 }

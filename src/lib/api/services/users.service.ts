@@ -190,4 +190,23 @@ export const usersService = {
   async hardDeleteUser(id: string, confirmation: { matricule: string; password: string }): Promise<void> {
     await apiClient.post(API.USERS.HARD_DELETE(id), confirmation);
   },
+
+  /**
+   * Issue a student a new password when they have forgotten theirs.
+   *
+   * Stored passwords are hashed, so the old one cannot be looked up - a reset
+   * is the only way to help. Leave `newPassword` empty and the server generates
+   * one. The response carries the value to hand to the student; it cannot be
+   * retrieved again afterwards.
+   */
+  async adminResetStudentPassword(
+    id: string,
+    newPassword?: string,
+  ): Promise<{ password: string; detail: string }> {
+    const { data } = await apiClient.post(
+      API.USERS.ADMIN_RESET_PASSWORD(id),
+      newPassword ? { new_password: newPassword } : {},
+    );
+    return data;
+  },
 };

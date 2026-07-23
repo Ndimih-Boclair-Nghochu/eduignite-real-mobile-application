@@ -22,7 +22,26 @@ const normalizePublicEvent = (event: PublicEvent): PublicEvent => ({
   comments: Array.isArray(event?.comments) ? event.comments : [],
 });
 
+export type PublicSiteStatus = {
+  testimonials: { live: number; awaiting_review: number };
+  blog: { live: number; drafts: number };
+  gallery: { photos: number; videos: number };
+  cache_seconds: number;
+};
+
 export const platformService = {
+  /** What is currently live on the public marketing website. */
+  async getPublicSiteStatus(): Promise<PublicSiteStatus> {
+    const { data } = await apiClient.get(API.PLATFORM.PUBLIC_SITE);
+    return data;
+  },
+
+  /** Push approved/published changes to the public site immediately. */
+  async refreshPublicSite(): Promise<{ detail: string }> {
+    const { data } = await apiClient.post(API.PLATFORM.PUBLIC_SITE, {});
+    return data;
+  },
+
   async getPlatformSettings(): Promise<PlatformSettings> {
     const { data } = await apiClient.get(API.PLATFORM.SETTINGS);
     return normalizePlatformSettings(data);
@@ -144,4 +163,20 @@ export const platformService = {
     const { data } = await apiClient.get(API.PLATFORM.TUTORIALS);
     return data;
   },
+
+  // Messages sent from the public website contact form (founders only).
+  async getContactMessages(): Promise<ContactMessage[]> {
+    const { data } = await apiClient.get(API.PLATFORM.CONTACT_MESSAGES);
+    return Array.isArray(data) ? data : (data?.results ?? []);
+  },
+};
+
+export type ContactMessage = {
+  id: string;
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: string;
+  created_at: string;
 };

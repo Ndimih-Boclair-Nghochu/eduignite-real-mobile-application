@@ -53,7 +53,6 @@ export const metadata: Metadata = {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
       { url: "/favicon.ico?size=32", sizes: "32x32" },
-      { url: "/eduignite-logo.svg", type: "image/svg+xml" },
       { url: "/icons/eduignite-icon-192.png", sizes: "192x192", type: "image/png" },
     ],
     shortcut: "/favicon.ico",
@@ -112,8 +111,14 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/*
+          Inter carries the UI and body copy. Newsreader is the editorial serif
+          behind every `font-serif` heading — it reads as documents and records,
+          which is what this platform issues. Instrument Serif is reserved for
+          display-size headlines (`font-display`), where its high contrast lands.
+        */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Instrument+Serif:ital@0;1&display=swap"
           rel="stylesheet"
         />
       </head>

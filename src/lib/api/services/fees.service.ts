@@ -22,6 +22,12 @@ export const feesService = {
 
   // Fee types applicable to the signed-in student, or a parent's children.
   // Returns a flat array of fee items (see backend my_fees).
+  /** Every learner a fee type applies to, and whether they have paid it. */
+  async getFeeStudentStatus(feeId: string): Promise<any> {
+    const { data } = await apiClient.get(API.FEES.FEE_STUDENT_STATUS(feeId));
+    return data;
+  },
+
   async getMyFees(): Promise<any[]> {
     const { data } = await apiClient.get(API.FEES.MY_FEES);
     return Array.isArray(data) ? data : (data?.results ?? []);

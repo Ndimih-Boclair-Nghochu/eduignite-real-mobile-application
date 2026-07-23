@@ -146,59 +146,57 @@ export default function IdCardsPage() {
     link.remove();
   };
 
+  // One CR80 card per page, each side on its own page — built by the shared
+  // helper, which waits for the web font and the school logo before capturing
+  // so the header is never cut off. On the phone the WebView has no print
+  // dialog, so the same PDF is saved into the eduignite folder instead.
+  const cardFileName = () => {
+    const first = document.querySelector<HTMLElement>("[data-idcard-side]")?.getAttribute("data-idcard-name") || "student";
+    const slug = first.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "student";
+    return selectedStudents.length > 1 ? "student-id-cards.pdf" : `id-card-${slug}.pdf`;
+  };
+
   const handleDownloadPdf = async () => {
     if (selectedStudents.length === 0) {
       toast({ variant: "destructive", title: "No Students Selected", description: "Please select at least one student to generate IDs." });
       return;
     }
-    // Web/desktop: the system print dialog gives a pixel-perfect Save as PDF.
-    if (!isNativeApp()) {
-      toast({ title: "Preparing PDF", description: "Choose “Save as PDF” in the dialog that opens." });
-      setTimeout(() => window.print(), 250);
-      return;
-    }
-    // Mobile app: the print dialog isn't available in the WebView, so capture
-    // each rendered card side and assemble a real multi-page PDF document
-    // (front = page 1, back = page 2, per student), then save it to the folder.
     setIsGeneratingPdf(true);
     try {
-      const html2canvas = (await import("html2canvas")).default;
-      const { default: JsPDF } = await import("jspdf");
-      const sides = Array.from(document.querySelectorAll<HTMLElement>("[data-idcard-side]"));
-      if (sides.length === 0) throw new Error("Open the ID card preview before downloading.");
-
-      let pdf: any = null;
-      for (const el of sides) {
-        const canvas = await html2canvas(el, { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false });
-        const imgData = canvas.toDataURL("image/png");
-        const w = canvas.width;
-        const h = canvas.height;
-        const orientation = w >= h ? "landscape" : "portrait";
-        if (!pdf) {
-          pdf = new JsPDF({ orientation, unit: "px", format: [w, h] });
-        } else {
-          pdf.addPage([w, h], orientation);
-        }
-        pdf.addImage(imgData, "PNG", 0, 0, w, h);
+      const { buildIdCardsPdf } = await import("@/lib/id-card-pdf");
+      const doc = await buildIdCardsPdf(document.body);
+      const fileName = cardFileName();
+      if (isNativeApp()) {
+        const base64 = doc.output("datauristring").split(",")[1] || "";
+        await saveToEduignite({ fileName, base64, mimeType: "application/pdf" });
+        toast({ title: "ID card saved", description: `Saved as a PDF (${selectedStudents.length * 2} pages at 85.6 × 53.98 mm) in your Documents/eduignite folder.` });
+      } else {
+        doc.save(fileName);
+        toast({ title: "ID cards downloaded", description: `${selectedStudents.length * 2} pages at 85.6 × 53.98 mm, front and back separated.` });
       }
-
-      const firstName = sides[0].getAttribute("data-idcard-name") || "student";
-      const name = firstName.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "student";
-      const cardCount = Math.ceil(sides.length / 2);
-      const fileName = cardCount > 1 ? "id-cards.pdf" : `id-card-${name}.pdf`;
-      const base64 = pdf.output("datauristring").split(",")[1] || "";
-      await saveToEduignite({ fileName, base64, mimeType: "application/pdf" });
-      toast({ title: "ID card saved", description: `Saved as a PDF (${sides.length} page${sides.length > 1 ? "s" : ""}) in your Documents/eduignite folder.` });
     } catch (err: any) {
-      toast({ variant: "destructive", title: "Download failed", description: err?.message || "Could not save the ID card to your device." });
+      toast({ variant: "destructive", title: "Could not build the cards", description: err?.message || "Please try again." });
     } finally {
       setIsGeneratingPdf(false);
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-    toast({ title: "Print Command Sent", description: "Sending batch to your institutional printer." });
+  const handlePrint = async () => {
+    if (selectedStudents.length === 0) {
+      toast({ variant: "destructive", title: "No Students Selected", description: "Please select at least one student to generate IDs." });
+      return;
+    }
+    // No print dialog inside the WebView — save the PDF instead.
+    if (isNativeApp()) { await handleDownloadPdf(); return; }
+    setIsGeneratingPdf(true);
+    try {
+      const { printIdCardsPdf } = await import("@/lib/id-card-pdf");
+      await printIdCardsPdf(document.body);
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Could not open print", description: err?.message || "Please try again." });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   return (

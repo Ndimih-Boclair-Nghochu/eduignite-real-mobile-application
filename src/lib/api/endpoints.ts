@@ -30,6 +30,7 @@ export const API = {
     SUSPEND: (id: string) => `/users/${id}/suspend/`,
     UNSUSPEND: (id: string) => `/users/${id}/unsuspend/`,
     HARD_DELETE: (id: string) => `/users/${id}/hard-delete/`,
+    ADMIN_RESET_PASSWORD: (id: string) => `/users/${id}/admin-reset-password/`,
   },
   SCHOOLS: {
     BASE: '/schools/schools/',
@@ -72,6 +73,7 @@ export const API = {
       `/schools/${schoolId}/students/${studentId}/guardians/${guardianId}/`,
   },
   PLATFORM: {
+    PUBLIC_SITE: '/platform/public-site/',
     SETTINGS: '/platform/settings/',
     UPLOAD_LOGO: '/platform/upload-logo/',
     UPLOAD_EVENT_MEDIA: '/platform/upload-event-media/',
@@ -79,6 +81,7 @@ export const API = {
     EVENTS: '/platform/events/',
     TUTORIALS: '/platform/tutorials/',
     STATS: '/platform/stats/',
+    CONTACT_MESSAGES: '/platform/contact-messages/',
     EVENT_DETAIL: (id: string) => `/platform/events/${id}/`,
     EVENT_LIKE: (id: string) => `/platform/events/${id}/like/`,
     EVENT_UNLIKE: (id: string) => `/platform/events/${id}/unlike/`,
@@ -189,6 +192,7 @@ export const API = {
     STRUCTURES: '/fees/fee-structures/',
     STRUCTURE_DETAIL: (id: string) => `/fees/fee-structures/${id}/`,
     MY_FEES: '/fees/fee-structures/my-fees/',
+    FEE_STUDENT_STATUS: (id: string) => `/fees/fee-structures/${id}/student-status/`,
     PAYUNIT_COLLECT: '/fees/payunit/collect/',
     PAYUNIT_STATUS: (transactionId: string) => `/fees/payunit/status/${transactionId}/`,
     PAYMENTS: '/fees/payments/',

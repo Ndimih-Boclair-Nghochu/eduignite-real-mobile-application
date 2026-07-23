@@ -40,7 +40,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
         <Card className="border-none bg-white shadow-lg">
           <CardContent className="flex min-h-[420px] flex-col items-center justify-center gap-5 px-6 py-14 text-center">
             <img
-              src="/eduignite-logo.svg"
+              src="/icon.png"
               alt="EduIgnite"
               className="h-20 w-20 object-contain"
             />

@@ -9,13 +9,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FeeRecords } from "./fee-records";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth-context";
 import { feesService } from "@/lib/api/services/fees.service";
 import { RecordPayment } from "./record-payment";
 import { Subscription } from "./subscription";
 import { FeeTypes } from "./fee-types";
-import { buildFeeReceiptHtml, downloadReceiptHtml, receiptFromFeeItem, money } from "./fee-receipt";
+import { downloadReceiptPdf, receiptFromFeeItem, money } from "./fee-receipt";
 
 function humanizeStatus(status: string) {
   if (status === "paid") return "Paid";
@@ -50,8 +51,7 @@ export default function FeesPage() {
   }, [feeItems]);
 
   const downloadReceipt = (item: any) => {
-    const html = buildFeeReceiptHtml(receiptFromFeeItem(item), schoolName);
-    downloadReceiptHtml(html, `receipt_${item.receipt_number || item.name || "fee"}.html`);
+    downloadReceiptPdf(receiptFromFeeItem(item), schoolName);
   };
 
   // ---------------- Student / Parent view ----------------
@@ -183,19 +183,21 @@ export default function FeesPage() {
             {user?.role === "BURSAR" ? "Fee Portal" : "Fees & Finance"}
           </h1>
           <p className="mt-1 text-xs text-muted-foreground md:text-sm">
-            Record fee payments, collect the platform subscription, and manage fee types.
+            Record fee payments, review the fee ledger, collect the platform subscription, and manage fee types.
           </p>
         </div>
       </div>
 
       <Tabs defaultValue="record" className="w-full">
-        <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl border bg-white p-1.5 shadow-sm sm:w-auto">
+        <TabsList className="grid h-auto w-full grid-cols-2 rounded-2xl border bg-white p-1.5 shadow-sm sm:w-auto sm:grid-cols-4">
           <TabsTrigger value="record" className="rounded-xl py-3 text-xs font-bold sm:text-sm">Record Payment</TabsTrigger>
+          <TabsTrigger value="records" className="rounded-xl py-3 text-xs font-bold sm:text-sm">Fee Records</TabsTrigger>
           <TabsTrigger value="subscription" className="rounded-xl py-3 text-xs font-bold sm:text-sm">Subscription</TabsTrigger>
           <TabsTrigger value="fee-types" className="rounded-xl py-3 text-xs font-bold sm:text-sm">Fee Type</TabsTrigger>
         </TabsList>
 
         <TabsContent value="record" className="mt-6 space-y-6"><RecordPayment /></TabsContent>
+        <TabsContent value="records" className="mt-6 space-y-6"><FeeRecords /></TabsContent>
         <TabsContent value="subscription" className="mt-6 space-y-6"><Subscription /></TabsContent>
         <TabsContent value="fee-types" className="mt-6 space-y-6"><FeeTypes /></TabsContent>
       </Tabs>

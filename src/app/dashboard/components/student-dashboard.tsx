@@ -37,12 +37,16 @@ export function StudentDashboard() {
   const activeLoans = myLoansResp?.results ?? [];
   const grades = gradesResp?.results ?? [];
   const profile = studentProfile as any;
-  const currentClassName =
+  // A learner who finished the final class has left it, so the account says
+  // "Graduated" rather than keeping them in the class they completed.
+  const hasGraduated = Boolean(profile?.is_graduated);
+  const enrolledClassName =
     profile?.school_class_name ||
     profile?.student_class ||
     (user as any)?.class ||
     (user as any)?.student_class ||
     "Class not assigned";
+  const currentClassName = hasGraduated ? "Graduated" : enrolledClassName;
   const currentSubSchoolName =
     profile?.sub_school_name ||
     profile?.school_class?.sub_school?.name ||
@@ -148,9 +152,16 @@ export function StudentDashboard() {
           <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
             <div className="flex items-center gap-3">
               <BookOpen className="h-5 w-5 text-secondary" />
-              <p className="text-[10px] font-black uppercase tracking-widest text-white/70">Current Class</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-white/70">
+                {hasGraduated ? "Standing" : "Current Class"}
+              </p>
             </div>
             <p className="mt-3 text-2xl font-black leading-tight">{currentClassName}</p>
+            {hasGraduated ? (
+              <p className="mt-1 text-[11px] font-semibold text-white/60">
+                Completed {enrolledClassName}
+              </p>
+            ) : null}
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
             <div className="flex items-center gap-3">

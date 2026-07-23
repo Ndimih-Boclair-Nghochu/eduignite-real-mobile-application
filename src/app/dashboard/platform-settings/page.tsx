@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n-context";
 import { usePlatformSettings, usePlatformFees, usePublicEvents, useUpdatePlatformSettings, useCreatePublicEvent, useDeletePublicEvent, useUpdatePublicEvent } from "@/lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { platformService } from "@/lib/api/services/platform.service";
+import { PublicSitePanel } from "@/components/dashboard/public-site-panel";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -632,6 +633,8 @@ export default function PlatformSettingsPage() {
         )}
 
         <TabsContent value="marketing" className="space-y-8">
+          {isExecutive && <PublicSitePanel />}
+
           <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden">
             <CardHeader className="bg-primary p-10 text-white">
               <div className="flex items-center gap-4">

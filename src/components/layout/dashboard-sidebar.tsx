@@ -41,7 +41,7 @@ import {
   Video,
   Medal,
   Bell,
-  Store,
+  Boxes,
   Database,
   Map,
   Radar,
@@ -172,6 +172,12 @@ export function useDashboardRoutes() {
       roles: ["SCHOOL_ADMIN", "SUB_ADMIN"],
     },
     {
+      label: language === "en" ? "Performance Report" : "Rapport de Performance",
+      icon: Trophy,
+      href: "/dashboard/academics/performance",
+      roles: ["SCHOOL_ADMIN", "SUB_ADMIN"],
+    },
+    {
       label: language === "en" ? "Academic Reward" : "Recompense Academique",
       icon: Trophy,
       href: "/dashboard/rewards",
@@ -197,9 +203,18 @@ export function useDashboardRoutes() {
       roles: [...EXECUTIVE_ROLES, "SCHOOL_ADMIN", "SUB_ADMIN", "TEACHER", "STUDENT", "PARENT", "BURSAR", "LIBRARIAN"],
     },
     {
-      label: language === "en" ? "App Store" : "Boutique d'applications",
-      icon: Store,
-      href: "/dashboard/app-store",
+      label: "App Registry",
+      icon: Boxes,
+      href: "/dashboard/apps",
+      roles: ["SUPER_ADMIN", "CEO", "CTO"],
+    },
+    {
+      // The store where EduIgnite publishes apps. Available in every dashboard,
+      // not just the school admin's — some apps are installed by individuals and
+      // then appear in their own workspace.
+      label: "App Store",
+      icon: Boxes,
+      href: "/dashboard/app-market",
       roles: [...EXECUTIVE_ROLES, "SCHOOL_ADMIN", "SUB_ADMIN", "TEACHER", "STUDENT", "PARENT", "BURSAR", "LIBRARIAN"],
     },
     {

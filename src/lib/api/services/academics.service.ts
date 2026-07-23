@@ -117,6 +117,12 @@ export const academicsService = {
     return data;
   },
 
+  /** Commit the decision that the selected learners repeat their current class. */
+  async bulkRepeatStudents(payload: any) {
+    const { data } = await apiClient.post("/students/students/bulk-repeat-selected/", payload);
+    return data;
+  },
+
   async recalculateStudentPromotions(payload: {
     academic_year: string;
     promotion_average?: number;

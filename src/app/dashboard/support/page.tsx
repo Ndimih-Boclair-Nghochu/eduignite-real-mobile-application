@@ -32,6 +32,8 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { ordersService } from "@/lib/api/services/orders.service";
 import { supportService } from "@/lib/api/services/support.service";
+import { platformService } from "@/lib/api/services/platform.service";
+import { MessageSquare } from "lucide-react";
 
 const normalizeList = (payload: any) => {
   if (Array.isArray(payload)) return payload;
@@ -59,6 +61,14 @@ const useSupportContributions = () =>
   useQuery({
     queryKey: ["support-contributions"],
     queryFn: async () => normalizeList(await supportService.getSupportContributions()),
+    retry: 2,
+  });
+
+const useContactMessages = (enabled: boolean) =>
+  useQuery({
+    queryKey: ["contact-messages"],
+    queryFn: async () => normalizeList(await platformService.getContactMessages()),
+    enabled,
     retry: 2,
   });
 
@@ -103,6 +113,13 @@ export default function SupportLedgerPage() {
     isError: contribError,
     refetch: refetchContrib,
   } = useSupportContributions();
+
+  const {
+    data: messages = [],
+    isLoading: messagesLoading,
+    isError: messagesError,
+    refetch: refetchMessages,
+  } = useContactMessages(isSuperAdmin);
 
   const processOrderMutation = useProcessOrder();
   const verifyContribMutation = useVerifyContribution();
@@ -261,7 +278,7 @@ export default function SupportLedgerPage() {
       </Dialog>
 
       <Tabs defaultValue="orders" className="w-full">
-        <TabsList className="grid grid-cols-2 w-full md:w-[400px] mb-8 bg-white shadow-sm border h-auto p-1 rounded-2xl">
+        <TabsList className="grid grid-cols-3 w-full md:w-[560px] mb-8 bg-white shadow-sm border h-auto p-1 rounded-2xl">
           <TabsTrigger value="orders" className="gap-2 py-3 rounded-xl transition-all font-bold">
             <Package className="w-4 h-4" /> Platform Orders
             {orders.length > 0 && (
@@ -275,6 +292,14 @@ export default function SupportLedgerPage() {
             {contributions.length > 0 && (
               <Badge className="ml-1 h-5 px-2 text-[9px] bg-secondary text-primary border-none">
                 {contributions.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="messages" className="gap-2 py-3 rounded-xl transition-all font-bold">
+            <MessageSquare className="w-4 h-4" /> Messages
+            {messages.length > 0 && (
+              <Badge className="ml-1 h-5 px-2 text-[9px] bg-primary text-white border-none">
+                {messages.length}
               </Badge>
             )}
           </TabsTrigger>
@@ -500,6 +525,73 @@ export default function SupportLedgerPage() {
                     </div>
                   </div>
                 </div>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
+        {/* WEBSITE MESSAGES TAB */}
+        <TabsContent value="messages" className="mt-0 animate-in fade-in">
+          {messagesLoading && (
+            <div className="flex items-center justify-center py-20 gap-3 text-muted-foreground">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <span className="font-bold text-sm">Loading messages…</span>
+            </div>
+          )}
+
+          {messagesError && !messagesLoading && (
+            <div className="flex flex-col items-center justify-center py-20 gap-4 bg-white/50 rounded-[2rem] border-2 border-dashed border-destructive/20">
+              <AlertCircle className="w-12 h-12 text-destructive/30" />
+              <p className="text-muted-foreground font-bold">Failed to load messages.</p>
+              <Button variant="outline" size="sm" onClick={() => refetchMessages()} className="gap-2">
+                <RefreshCw className="w-4 h-4" /> Retry
+              </Button>
+            </div>
+          )}
+
+          {!messagesLoading && !messagesError && messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 bg-white/50 rounded-[2rem] border-2 border-dashed border-primary/10">
+              <MessageSquare className="w-16 h-16 text-primary/10" />
+              <p className="text-muted-foreground font-bold">No messages from the website yet.</p>
+              <p className="text-muted-foreground/70 text-xs max-w-sm">
+                Messages sent from the public contact form appear here.
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            {messages.map((m: any) => (
+              <Card key={m.id} className="border-none shadow-xl overflow-hidden bg-white rounded-[1.5rem]">
+                <CardHeader className="bg-primary/5 border-b px-6 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="font-black text-primary text-sm uppercase tracking-tight leading-tight truncate">
+                        {m.subject || "No subject"}
+                      </h3>
+                      <p className="text-[11px] text-muted-foreground font-bold mt-0.5 truncate">
+                        {m.name} · {m.email}
+                      </p>
+                    </div>
+                    <Badge className="shrink-0 bg-amber-100 text-amber-700 font-black uppercase text-[9px] px-3 py-1">
+                      {m.status || "New"}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-6 space-y-4">
+                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{m.message}</p>
+                  <div className="flex items-center justify-between border-t pt-4">
+                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-primary/40" />
+                      {new Date(m.created_at).toLocaleString()}
+                    </span>
+                    <a
+                      href={`mailto:${m.email}?subject=${encodeURIComponent("Re: " + (m.subject || "your message"))}`}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline"
+                    >
+                      <Mail className="w-3.5 h-3.5" /> Reply by email
+                    </a>
+                  </div>
+                </CardContent>
               </Card>
             ))}
           </div>
